@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block page_title %}Recipes{% endblock %}
+
+{% block content %}
+  <section class="entry-layout">
+    <form class="panel form-panel" action="/recipes/" method="post">
+      <h2>Add Recipe</h2>
+      <label>
+        Title
+        <input name="title" required placeholder="Lemon chicken bowls">
+      </label>
+      <label>
+        Source
+        <input name="source" placeholder="URL, cookbook, friend">
+      </label>
+      <div class="form-row">
+        <label>
+          Cuisine
+          <input name="cuisine" placeholder="Mediterranean">
+        </label>
+        <label>
+          Tags
+          <input name="tags" placeholder="weeknight, high-protein">
+        </label>
+      </div>
+      <div class="form-row">
+        <label>
+          Calories
+          <input name="calories" inputmode="numeric" placeholder="520">
+        </label>
+        <label>
+          Prep min
+          <input name="prep_time_minutes" inputmode="numeric" placeholder="15">
+        </label>
+      </div>
+      <label>
+        Cook min
+        <input name="cook_time_minutes" inputmode="numeric" placeholder="25">
+      </label>
+      <label>
+        Ingredients
+        <textarea name="ingredients" rows="5" placeholder="One ingredient per line"></textarea>
+      </label>
+      <label>
+        Instructions
+        <textarea name="instructions" rows="5" placeholder="Steps, timing, oven temp"></textarea>
+      </label>
+      <label>
+        Notes
+        <textarea name="notes" rows="3" placeholder="What worked, what to change"></textarea>
+      </label>
+      <button type="submit">Add recipe</button>
+    </form>
+
+    <section class="panel inventory-panel">
+      <div class="panel-heading">
+        <h2>Cookbook</h2>
+        <span>{{ recipes|length }} recipes</span>
+      </div>
+      {% if recipes %}
+        <div class="recipe-grid">
+          {% for recipe in recipes %}
+            <article class="recipe-card">
+              <h3><a href="/recipes/{{ recipe.id }}">{{ recipe.title }}</a></h3>
+              <p>{{ recipe.notes or recipe.source or "No notes yet." }}</p>
+              <div class="card-meta">
+                {% if recipe.cuisine %}<span class="pill">{{ recipe.cuisine }}</span>{% endif %}
+                {% if recipe.tags %}<span>{{ recipe.tags }}</span>{% endif %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty">No recipes yet. Add a reliable weeknight meal to start the cookbook.</p>
+      {% endif %}
+    </section>
+  </section>
+{% endblock %}

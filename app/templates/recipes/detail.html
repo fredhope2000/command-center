@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ recipe.title }}{% endblock %}
+
+{% block content %}
+  <section class="detail-layout">
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>Recipe</h2>
+        <a href="/recipes/">Back</a>
+      </div>
+      <dl class="detail-list">
+        {% if recipe.source %}
+          <div>
+            <dt>Source</dt>
+            <dd>{{ recipe.source }}</dd>
+          </div>
+        {% endif %}
+        {% if recipe.cuisine or recipe.tags %}
+          <div>
+            <dt>Tags</dt>
+            <dd>{{ recipe.cuisine or "" }}{% if recipe.cuisine and recipe.tags %} · {% endif %}{{ recipe.tags or "" }}</dd>
+          </div>
+        {% endif %}
+        {% if recipe.calories or recipe.prep_time_minutes or recipe.cook_time_minutes %}
+          <div>
+            <dt>Stats</dt>
+            <dd>
+              {% if recipe.calories %}{{ recipe.calories }} calories{% endif %}
+              {% if recipe.prep_time_minutes %}{% if recipe.calories %} · {% endif %}{{ recipe.prep_time_minutes }} min prep{% endif %}
+              {% if recipe.cook_time_minutes %}{% if recipe.calories or recipe.prep_time_minutes %} · {% endif %}{{ recipe.cook_time_minutes }} min cook{% endif %}
+            </dd>
+          </div>
+        {% endif %}
+      </dl>
+
+      <div class="recipe-body">
+        {% if recipe.ingredients %}
+          <section>
+            <h2>Ingredients</h2>
+            <pre>{{ recipe.ingredients }}</pre>
+          </section>
+        {% endif %}
+        {% if recipe.instructions %}
+          <section>
+            <h2>Instructions</h2>
+            <pre>{{ recipe.instructions }}</pre>
+          </section>
+        {% endif %}
+        {% if recipe.notes %}
+          <section>
+            <h2>Notes</h2>
+            <p>{{ recipe.notes }}</p>
+          </section>
+        {% endif %}
+      </div>
+
+      <form class="delete-form" action="/recipes/{{ recipe.id }}/delete" method="post">
+        <button class="ghost" type="submit">Delete recipe</button>
+      </form>
+    </article>
+  </section>
+{% endblock %}

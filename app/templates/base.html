@@ -24,8 +24,8 @@
         <nav class="nav">
           <a class="{{ 'active' if active_nav == 'dashboard' else '' }}" href="/">Dashboard</a>
           <a class="{{ 'active' if active_nav == 'food' else '' }}" href="/food/">Food Inventory</a>
-          <a class="disabled" href="#" aria-disabled="true">Grocery Tracking</a>
-          <a class="disabled" href="#" aria-disabled="true">Recipes</a>
+          <a class="{{ 'active' if active_nav == 'groceries' else '' }}" href="/groceries/">Grocery Tracking</a>
+          <a class="{{ 'active' if active_nav == 'recipes' else '' }}" href="/recipes/">Recipes</a>
           <a class="disabled" href="#" aria-disabled="true">Restaurants</a>
           <a class="disabled" href="#" aria-disabled="true">Finances</a>
         </nav>
@@ -37,7 +37,6 @@
             <p class="eyebrow">Private household dashboard</p>
             <h1>{% block page_title %}Command Center{% endblock %}</h1>
           </div>
-          <a class="primary-action" href="/food/">Add food</a>
         </header>
 
         <main class="content">

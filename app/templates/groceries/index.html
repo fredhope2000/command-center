@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block page_title %}Grocery Tracking{% endblock %}
+
+{% block content %}
+  <section class="entry-layout">
+    <form class="panel form-panel" action="/groceries/" method="post">
+      <h2>Add Purchase</h2>
+      <label>
+        Store
+        <input name="store" required placeholder="Trader Joe's">
+      </label>
+      <div class="form-row">
+        <label>
+          Date
+          <input name="purchase_date" type="date">
+        </label>
+        <label>
+          Total
+          <input name="total_amount" inputmode="decimal" placeholder="42.35">
+        </label>
+      </div>
+      <label>
+        Notes
+        <textarea name="notes" rows="3" placeholder="Weekly shop, receipt notes, sale items"></textarea>
+      </label>
+      <button type="submit">Add purchase</button>
+    </form>
+
+    <section class="panel inventory-panel">
+      <div class="panel-heading">
+        <h2>Recent Purchases</h2>
+        <span>{{ purchases|length }} purchases</span>
+      </div>
+      {% if purchases %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>Date</th>
+                <th>Total</th>
+                <th>Items</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for purchase in purchases %}
+                <tr>
+                  <td>
+                    <strong><a href="/groceries/{{ purchase.id }}">{{ purchase.store }}</a></strong>
+                    {% if purchase.notes %}<small>{{ purchase.notes }}</small>{% endif %}
+                  </td>
+                  <td>{{ purchase.purchase_date }}</td>
+                  <td>{% if purchase.total_amount %}${{ "%.2f"|format(purchase.total_amount|float) }}{% endif %}</td>
+                  <td>{{ purchase.items|length }}</td>
+                  <td>
+                    <form action="/groceries/{{ purchase.id }}/delete" method="post">
+                      <button class="ghost" type="submit">Delete</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty">No grocery purchases yet. Add a trip, then attach line items on its detail page.</p>
+      {% endif %}
+    </section>
+  </section>
+{% endblock %}

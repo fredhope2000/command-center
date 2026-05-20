@@ -8,7 +8,9 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.db import init_db
 from app.routes.food import router as food_router
+from app.routes.groceries import router as groceries_router
 from app.routes.pages import router as pages_router, templates
+from app.routes.recipes import router as recipes_router
 
 STATIC_ROOT = Path("app/static")
 
@@ -27,6 +29,8 @@ def create_app() -> FastAPI:
     templates.env.globals["settings"] = settings
     app.include_router(pages_router)
     app.include_router(food_router)
+    app.include_router(groceries_router)
+    app.include_router(recipes_router)
     return app
 
 

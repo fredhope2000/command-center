@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ purchase.store }}{% endblock %}
+
+{% block content %}
+  <section class="entry-layout">
+    <form class="panel form-panel" action="/groceries/{{ purchase.id }}/items" method="post">
+      <h2>Add Line Item</h2>
+      <label>
+        Name
+        <input name="name" required placeholder="Bananas">
+      </label>
+      <div class="form-row">
+        <label>
+          Quantity
+          <input name="quantity" inputmode="decimal" placeholder="6">
+        </label>
+        <label>
+          Unit
+          <input name="unit" placeholder="ct, lb, bag">
+        </label>
+      </div>
+      <label>
+        Price
+        <input name="price" inputmode="decimal" placeholder="3.49">
+      </label>
+      <label>
+        Notes
+        <textarea name="notes" rows="3" placeholder="Brand, sale, substitute"></textarea>
+      </label>
+      <button type="submit">Add line item</button>
+    </form>
+
+    <section class="panel inventory-panel">
+      <div class="panel-heading">
+        <h2>Purchase Details</h2>
+        <a href="/groceries/">Back</a>
+      </div>
+      <dl class="detail-list">
+        <div>
+          <dt>Date</dt>
+          <dd>{{ purchase.purchase_date }}</dd>
+        </div>
+        <div>
+          <dt>Total</dt>
+          <dd>{% if purchase.total_amount %}${{ "%.2f"|format(purchase.total_amount|float) }}{% else %}-{% endif %}</dd>
+        </div>
+        {% if purchase.notes %}
+          <div>
+            <dt>Notes</dt>
+            <dd>{{ purchase.notes }}</dd>
+          </div>
+        {% endif %}
+      </dl>
+
+      <div class="panel-heading section-heading">
+        <h2>Line Items</h2>
+        <span>{{ purchase.items|length }} items</span>
+      </div>
+      {% if purchase.items %}
+        <ul class="item-list">
+          {% for item in purchase.items %}
+            <li>
+              <span>
+                <strong>{{ item.name }}</strong>
+                <small>
+                  {% if item.quantity %}{{ item.quantity|float }} {{ item.unit or "" }}{% endif %}
+                  {% if item.notes %}{% if item.quantity %} · {% endif %}{{ item.notes }}{% endif %}
+                </small>
+              </span>
+              {% if item.price %}<span>${{ "%.2f"|format(item.price|float) }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">No line items added yet.</p>
+      {% endif %}
+    </section>
+  </section>
+{% endblock %}

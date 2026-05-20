@@ -3,25 +3,6 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
-  <section class="metric-grid">
-    <article class="metric">
-      <span>Total inventory</span>
-      <strong>{{ summary.total_items }}</strong>
-    </article>
-    <article class="metric">
-      <span>Fridge</span>
-      <strong>{{ summary.counts_by_location.fridge }}</strong>
-    </article>
-    <article class="metric">
-      <span>Freezer</span>
-      <strong>{{ summary.counts_by_location.freezer }}</strong>
-    </article>
-    <article class="metric">
-      <span>Pantry</span>
-      <strong>{{ summary.counts_by_location.pantry }}</strong>
-    </article>
-  </section>
-
   <section class="two-column">
     <article class="panel">
       <div class="panel-heading">
@@ -68,13 +49,59 @@
     </article>
   </section>
 
+  <section class="two-column lower-dashboard">
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>Recent Grocery Trips</h2>
+        <a href="/groceries/">Track groceries</a>
+      </div>
+      {% if summary.recent_purchases %}
+        <ul class="item-list">
+          {% for purchase in summary.recent_purchases %}
+            <li>
+              <span>
+                <strong><a href="/groceries/{{ purchase.id }}">{{ purchase.store }}</a></strong>
+                <small>{{ purchase.purchase_date }}</small>
+              </span>
+              {% if purchase.total_amount %}<span>${{ "%.2f"|format(purchase.total_amount|float) }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">No grocery trips tracked yet.</p>
+      {% endif %}
+    </article>
+
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>Recent Recipes</h2>
+        <a href="/recipes/">Open cookbook</a>
+      </div>
+      {% if summary.recent_recipes %}
+        <ul class="item-list">
+          {% for recipe in summary.recent_recipes %}
+            <li>
+              <span>
+                <strong><a href="/recipes/{{ recipe.id }}">{{ recipe.title }}</a></strong>
+                <small>{{ recipe.cuisine or recipe.tags or "No tags yet" }}</small>
+              </span>
+              {% if recipe.calories %}<span>{{ recipe.calories }} cal</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">No recipes saved yet.</p>
+      {% endif %}
+    </article>
+  </section>
+
   <section class="roadmap">
     <h2>Coming Soon</h2>
     <div class="roadmap-grid">
-      <span>Grocery purchases</span>
-      <span>Recipes</span>
       <span>Restaurant notes</span>
       <span>Budget tracking</span>
+      <span>Meal planning</span>
+      <span>Receipt parsing</span>
     </div>
   </section>
 {% endblock %}

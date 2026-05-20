@@ -50,3 +50,39 @@ def test_food_item_can_be_created(client: TestClient) -> None:
     )
 
     assert response.status_code == 303
+
+
+def test_grocery_purchase_can_be_created(client: TestClient) -> None:
+    response = client.post(
+        "/groceries/",
+        data={
+            "store": "Test market",
+            "purchase_date": "2026-05-20",
+            "total_amount": "12.34",
+            "notes": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+
+
+def test_recipe_can_be_created(client: TestClient) -> None:
+    response = client.post(
+        "/recipes/",
+        data={
+            "title": "Test dinner",
+            "source": "",
+            "cuisine": "",
+            "tags": "weeknight",
+            "calories": "",
+            "prep_time_minutes": "",
+            "cook_time_minutes": "",
+            "ingredients": "Rice",
+            "instructions": "Cook it.",
+            "notes": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
