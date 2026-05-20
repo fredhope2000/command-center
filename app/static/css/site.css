@@ -209,15 +209,21 @@ button.ghost:hover {
   margin-top: 8px;
 }
 
-.two-column,
-.entry-layout {
+.two-column {
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
 }
 
+.entry-layout {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+}
+
 .panel,
 .roadmap {
+  min-width: 0;
   padding: 20px;
 }
 
@@ -296,6 +302,7 @@ small {
   align-self: start;
   display: grid;
   gap: 14px;
+  width: 100%;
 }
 
 label {
@@ -314,6 +321,7 @@ textarea {
   border-radius: 8px;
   color: var(--ink);
   font: inherit;
+  min-width: 0;
   padding: 10px 11px;
   width: 100%;
 }
@@ -325,7 +333,7 @@ textarea {
 .form-row {
   display: grid;
   gap: 12px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .table-wrap {
@@ -379,10 +387,32 @@ td form {
   .two-column,
   .entry-layout,
   .roadmap-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .form-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .content {
+    padding: 16px 12px 36px;
+  }
+
+  .panel,
+  .roadmap,
+  .metric {
+    padding: 14px;
+  }
+
+  .primary-action,
+  button {
+    width: 100%;
   }
 }
