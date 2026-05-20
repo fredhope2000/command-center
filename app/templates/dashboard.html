@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+  <section class="metric-grid">
+    <article class="metric">
+      <span>Total inventory</span>
+      <strong>{{ summary.total_items }}</strong>
+    </article>
+    <article class="metric">
+      <span>Fridge</span>
+      <strong>{{ summary.counts_by_location.fridge }}</strong>
+    </article>
+    <article class="metric">
+      <span>Freezer</span>
+      <strong>{{ summary.counts_by_location.freezer }}</strong>
+    </article>
+    <article class="metric">
+      <span>Pantry</span>
+      <strong>{{ summary.counts_by_location.pantry }}</strong>
+    </article>
+  </section>
+
+  <section class="two-column">
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>Expiring Soon</h2>
+        <a href="/food/">View inventory</a>
+      </div>
+      {% if summary.expiring_soon %}
+        <ul class="item-list">
+          {% for item in summary.expiring_soon %}
+            <li>
+              <span>
+                <strong>{{ item.name }}</strong>
+                <small>{{ item.location.value|title }}{% if item.quantity %} · {{ item.quantity|float }} {{ item.unit or "" }}{% endif %}</small>
+              </span>
+              <time>{{ item.expiration_date }}</time>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">No tracked items are expiring in the next week.</p>
+      {% endif %}
+    </article>
+
+    <article class="panel">
+      <div class="panel-heading">
+        <h2>Recently Added</h2>
+        <a href="/food/">Manage</a>
+      </div>
+      {% if summary.recently_added %}
+        <ul class="item-list">
+          {% for item in summary.recently_added %}
+            <li>
+              <span>
+                <strong>{{ item.name }}</strong>
+                <small>{{ item.category or "Uncategorized" }}</small>
+              </span>
+              <span class="pill">{{ item.location.value }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">Add a few inventory items to start seeing household signals here.</p>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="roadmap">
+    <h2>Coming Soon</h2>
+    <div class="roadmap-grid">
+      <span>Grocery purchases</span>
+      <span>Recipes</span>
+      <span>Restaurant notes</span>
+      <span>Budget tracking</span>
+    </div>
+  </section>
+{% endblock %}

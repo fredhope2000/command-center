@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title or "Command Center" }}</title>
+    <link rel="stylesheet" href="{{ static_asset('css/site.css') }}">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="/">
+          <span class="brand-mark">CC</span>
+          <span>
+            <strong>Command Center</strong>
+            <small>
+              Household ops
+              {% if not settings.is_production %}
+                <span class="env-badge">{{ settings.app_env }}</span>
+              {% endif %}
+            </small>
+          </span>
+        </a>
+        <nav class="nav">
+          <a class="{{ 'active' if active_nav == 'dashboard' else '' }}" href="/">Dashboard</a>
+          <a class="{{ 'active' if active_nav == 'food' else '' }}" href="/food/">Food Inventory</a>
+          <a class="disabled" href="#" aria-disabled="true">Grocery Tracking</a>
+          <a class="disabled" href="#" aria-disabled="true">Recipes</a>
+          <a class="disabled" href="#" aria-disabled="true">Restaurants</a>
+          <a class="disabled" href="#" aria-disabled="true">Finances</a>
+        </nav>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Private household dashboard</p>
+            <h1>{% block page_title %}Command Center{% endblock %}</h1>
+          </div>
+          <a class="primary-action" href="/food/">Add food</a>
+        </header>
+
+        <main class="content">
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

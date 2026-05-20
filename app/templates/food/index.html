@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block page_title %}Food Inventory{% endblock %}
+
+{% block content %}
+  <section class="entry-layout">
+    <form class="panel form-panel" action="/food/" method="post">
+      <h2>Add Item</h2>
+      <label>
+        Name
+        <input name="name" required placeholder="Greek yogurt">
+      </label>
+      <div class="form-row">
+        <label>
+          Quantity
+          <input name="quantity" inputmode="decimal" placeholder="2">
+        </label>
+        <label>
+          Unit
+          <input name="unit" placeholder="cups, bags, lb">
+        </label>
+      </div>
+      <div class="form-row">
+        <label>
+          Location
+          <select name="location">
+            {% for location in locations %}
+              <option value="{{ location.value }}">{{ location.value|title }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Category
+          <input name="category" placeholder="Dairy, produce, staple">
+        </label>
+      </div>
+      <label>
+        Expiration date
+        <input name="expiration_date" type="date">
+      </label>
+      <label>
+        Notes
+        <textarea name="notes" rows="3" placeholder="Brand, preferences, meal ideas"></textarea>
+      </label>
+      <button type="submit">Add inventory item</button>
+    </form>
+
+    <section class="panel inventory-panel">
+      <div class="panel-heading">
+        <h2>Current Stock</h2>
+        <span>{{ items|length }} items</span>
+      </div>
+      {% if items %}
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Qty</th>
+                <th>Location</th>
+                <th>Category</th>
+                <th>Expires</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+                <tr>
+                  <td>
+                    <strong>{{ item.name }}</strong>
+                    {% if item.notes %}<small>{{ item.notes }}</small>{% endif %}
+                  </td>
+                  <td>{% if item.quantity %}{{ item.quantity|float }} {{ item.unit or "" }}{% else %}<span class="muted">-</span>{% endif %}</td>
+                  <td><span class="pill">{{ item.location.value }}</span></td>
+                  <td>{{ item.category or "" }}</td>
+                  <td>{{ item.expiration_date or "" }}</td>
+                  <td>
+                    <form action="/food/{{ item.id }}/delete" method="post">
+                      <button class="ghost" type="submit">Delete</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="empty">No inventory yet. Add a few staples to test the flow.</p>
+      {% endif %}
+    </section>
+  </section>
+{% endblock %}
