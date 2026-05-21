@@ -241,6 +241,7 @@ function wireReceiptUploads() {
     }
 
     uploadButton.dataset.enableWhenEmpty = "true";
+    updateFormEmptyState(form);
 
     uploadButton.addEventListener("click", () => {
       if (!isFormEmpty(form)) {
