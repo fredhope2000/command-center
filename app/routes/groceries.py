@@ -3,14 +3,15 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models.food import GroceryPurchase, GroceryPurchaseItem
 from app.routes.pages import templates
+from app.services.inventory_reconciliation import add_grocery_item_to_inventory
 
 router = APIRouter(prefix="/groceries", tags=["groceries"])
 
@@ -46,14 +47,26 @@ def list_purchases(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.post("/parse-receipt")
+def parse_receipt(receipt_image: UploadFile = File(...)):
+    try:
+        from app.services.receipt_parser.extract import extract_receipt
+        from app.services.receipt_parser.upload_validation import validate_uploaded_receipt
+
+        validate_uploaded_receipt(receipt_image)
+        preview = extract_receipt(receipt_image)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return preview
+
+
 @router.post("/")
-def create_purchase(
-    store: str = Form(...),
-    purchase_date: str = Form(""),
-    total_amount: str = Form(""),
-    notes: str = Form(""),
-    db: Session = Depends(get_db),
-):
+async def create_purchase(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    store = str(form.get("store", ""))
+    purchase_date = str(form.get("purchase_date", ""))
+    total_amount = str(form.get("total_amount", ""))
+    notes = str(form.get("notes", ""))
     purchase = GroceryPurchase(
         store=store.strip(),
         purchase_date=_parse_date(purchase_date),
@@ -61,6 +74,35 @@ def create_purchase(
         notes=notes.strip() or None,
     )
     db.add(purchase)
+    db.flush()
+
+    item_names = [str(value) for value in form.getlist("item_name")]
+    item_quantities = [str(value) for value in form.getlist("item_quantity")]
+    item_units = [str(value) for value in form.getlist("item_unit")]
+    item_prices = [str(value) for value in form.getlist("item_price")]
+    item_notes = [str(value) for value in form.getlist("item_notes")]
+    for index, item_name in enumerate(item_names):
+        if not item_name.strip():
+            continue
+        db.add(
+            GroceryPurchaseItem(
+                purchase_id=purchase.id,
+                name=item_name.strip(),
+                quantity=_parse_optional_decimal(
+                    item_quantities[index] if index < len(item_quantities) else ""
+                ),
+                unit=item_units[index].strip()
+                if index < len(item_units) and item_units[index].strip()
+                else None,
+                price=_parse_optional_decimal(
+                    item_prices[index] if index < len(item_prices) else ""
+                ),
+                notes=item_notes[index].strip()
+                if index < len(item_notes) and item_notes[index].strip()
+                else None,
+            )
+        )
+
     db.commit()
     return RedirectResponse("/groceries/", status_code=303)
 
@@ -162,6 +204,21 @@ def delete_purchase_item(
     if item is not None and item.purchase_id == purchase_id:
         db.delete(item)
         db.commit()
+    return RedirectResponse(f"/groceries/{purchase_id}", status_code=303)
+
+
+@router.post("/{purchase_id}/items/{item_id}/add-to-inventory")
+def add_purchase_item_to_inventory(
+    purchase_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+):
+    purchase = db.get(GroceryPurchase, purchase_id)
+    item = db.get(GroceryPurchaseItem, item_id)
+    if purchase is None or item is None or item.purchase_id != purchase_id:
+        return RedirectResponse(f"/groceries/{purchase_id}", status_code=303)
+    if item.inventory_item_id is None:
+        add_grocery_item_to_inventory(db, item, purchase)
     return RedirectResponse(f"/groceries/{purchase_id}", status_code=303)
 
 

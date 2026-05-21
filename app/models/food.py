@@ -69,8 +69,15 @@ class GroceryPurchaseItem(Base):
     unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
     price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inventory_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("food_items.id"), nullable=True
+    )
+    added_to_inventory_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
 
     purchase: Mapped[GroceryPurchase] = relationship(back_populates="items")
+    inventory_item: Mapped[FoodItem | None] = relationship()
 
 
 class Recipe(Base):
@@ -81,7 +88,11 @@ class Recipe(Base):
     source: Mapped[str | None] = mapped_column(String(240), nullable=True)
     cuisine: Mapped[str | None] = mapped_column(String(80), nullable=True)
     tags: Mapped[str | None] = mapped_column(String(240), nullable=True)
-    calories: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    servings: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shelf_life_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    calories_per_serving: Mapped[int | None] = mapped_column(
+        "calories", Integer, nullable=True
+    )
     prep_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cook_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ingredients: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -60,21 +60,35 @@ def main() -> None:
             if row.name not in existing:
                 db.add(row)
 
-        existing_recipes = {recipe.title for recipe in db.query(Recipe).all()}
-        if "Lemon chicken bowls" not in existing_recipes:
+        lemon_chicken = (
+            db.query(Recipe).filter(Recipe.title == "Lemon chicken bowls").one_or_none()
+        )
+        if lemon_chicken is None:
             db.add(
                 Recipe(
                     title="Lemon chicken bowls",
                     source="Family notes",
                     cuisine="Mediterranean",
                     tags="weeknight, high-protein",
-                    calories=520,
+                    servings=4,
+                    shelf_life_days=4,
+                    calories_per_serving=520,
                     prep_time_minutes=15,
                     cook_time_minutes=25,
                     ingredients="Chicken thighs\nBrown rice\nSpinach\nLemon\nGreek yogurt",
                     instructions="Cook rice. Roast chicken. Wilt spinach. Mix yogurt lemon sauce.",
                     notes="Good candidate for using pantry rice and freezer chicken.",
                 )
+            )
+        else:
+            lemon_chicken.servings = lemon_chicken.servings or 4
+            lemon_chicken.shelf_life_days = (
+                lemon_chicken.shelf_life_days
+                if lemon_chicken.shelf_life_days is not None
+                else 4
+            )
+            lemon_chicken.calories_per_serving = (
+                lemon_chicken.calories_per_serving or 520
             )
 
         existing_purchases = {

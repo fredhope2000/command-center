@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
@@ -41,3 +41,44 @@ def init_db() -> None:
     from app.models import food  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _ensure_lightweight_schema_updates()
+
+
+def _ensure_lightweight_schema_updates() -> None:
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    with engine.begin() as connection:
+        recipe_columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(recipes)"))
+        }
+        if recipe_columns and "servings" not in recipe_columns:
+            connection.execute(text("ALTER TABLE recipes ADD COLUMN servings INTEGER"))
+        if recipe_columns and "shelf_life_days" not in recipe_columns:
+            connection.execute(
+                text("ALTER TABLE recipes ADD COLUMN shelf_life_days INTEGER")
+            )
+
+        grocery_item_columns = {
+            row[1]
+            for row in connection.execute(
+                text("PRAGMA table_info(grocery_purchase_items)")
+            )
+        }
+        if grocery_item_columns and "inventory_item_id" not in grocery_item_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE grocery_purchase_items "
+                    "ADD COLUMN inventory_item_id INTEGER"
+                )
+            )
+        if (
+            grocery_item_columns
+            and "added_to_inventory_at" not in grocery_item_columns
+        ):
+            connection.execute(
+                text(
+                    "ALTER TABLE grocery_purchase_items "
+                    "ADD COLUMN added_to_inventory_at DATETIME"
+                )
+            )

@@ -15,7 +15,7 @@
             <li>
               <span>
                 <strong>{{ item.name }}</strong>
-                <small>{{ item.location.value|title }}{% if item.quantity %} · {{ item.quantity|float }} {{ item.unit or "" }}{% endif %}</small>
+                <small>{{ item.location.value|title }}{% if item.quantity %} · {{ item.quantity|compact_number }} {{ item.unit or "" }}{% endif %}</small>
               </span>
               <time>{{ item.expiration_date }}</time>
             </li>
@@ -85,7 +85,7 @@
                 <strong><a href="/recipes/{{ recipe.id }}">{{ recipe.title }}</a></strong>
                 <small>{{ recipe.cuisine or recipe.tags or "No tags yet" }}</small>
               </span>
-              {% if recipe.calories %}<span>{{ recipe.calories }} cal</span>{% endif %}
+              {% if recipe.servings %}<span>{{ recipe.servings }} serving{{ "" if recipe.servings == 1 else "s" }}</span>{% endif %}
             </li>
           {% endfor %}
         </ul>

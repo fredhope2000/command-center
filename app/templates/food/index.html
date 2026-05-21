@@ -45,44 +45,72 @@
       <button type="submit">Add inventory item</button>
     </form>
 
-    <section class="panel inventory-panel">
+    <section class="panel inventory-panel editable-section">
       <div class="panel-heading">
         <h2>Current Stock</h2>
-        <span>{{ items|length }} items</span>
+        <div class="panel-actions">
+          <span>{{ items|length }} items</span>
+          {% if items %}
+            <button class="ghost js-toggle-edit-section" type="button">Edit</button>
+          {% endif %}
+        </div>
       </div>
       {% if items %}
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Qty</th>
-                <th>Location</th>
-                <th>Category</th>
-                <th>Expires</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in items %}
-                <tr>
-                  <td>
-                    <strong>{{ item.name }}</strong>
-                    {% if item.notes %}<small>{{ item.notes }}</small>{% endif %}
-                  </td>
-                  <td>{% if item.quantity %}{{ item.quantity|float }} {{ item.unit or "" }}{% else %}<span class="muted">-</span>{% endif %}</td>
-                  <td><span class="pill">{{ item.location.value }}</span></td>
-                  <td>{{ item.category or "" }}</td>
-                  <td>{{ item.expiration_date or "" }}</td>
-                  <td>
-                    <form action="/food/{{ item.id }}/delete" method="post">
-                      <button class="ghost" type="submit">Delete</button>
-                    </form>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="inventory-list">
+          {% for item in items %}
+            <article class="inventory-row">
+              <div class="inventory-readonly">
+                <div class="inventory-main">
+                  <strong>{{ item.name }}</strong>
+                  {% if item.notes %}<small>{{ item.notes }}</small>{% endif %}
+                </div>
+                <div class="inventory-meta">
+                  {% if item.quantity %}<span>{{ item.quantity|compact_number }} {{ item.unit or "" }}</span>{% endif %}
+                  <span class="pill">{{ item.location.value }}</span>
+                  {% if item.category %}<span>{{ item.category }}</span>{% endif %}
+                  {% if item.expiration_date %}<span>Expires {{ item.expiration_date }}</span>{% endif %}
+                </div>
+              </div>
+              <form class="inventory-fields js-dirty-form" action="/food/{{ item.id }}" method="post">
+                <label>
+                  Name
+                  <input name="name" required value="{{ item.name }}">
+                </label>
+                <label>
+                  Qty
+                  <input name="quantity" inputmode="decimal" value="{% if item.quantity %}{{ item.quantity|compact_number }}{% endif %}">
+                </label>
+                <label>
+                  Unit
+                  <input name="unit" value="{{ item.unit or '' }}">
+                </label>
+                <label>
+                  Location
+                  <select name="location">
+                    {% for location in locations %}
+                      <option value="{{ location.value }}" {% if location == item.location %}selected{% endif %}>{{ location.value|title }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>
+                  Category
+                  <input name="category" value="{{ item.category or '' }}">
+                </label>
+                <label>
+                  Expires
+                  <input name="expiration_date" type="date" value="{{ item.expiration_date or '' }}">
+                </label>
+                <label>
+                  Notes
+                  <input name="notes" value="{{ item.notes or '' }}">
+                </label>
+                <button type="submit" disabled>Save</button>
+              </form>
+              <form class="js-confirm-delete" action="/food/{{ item.id }}/delete" method="post">
+                <button class="ghost" type="submit">Delete</button>
+              </form>
+            </article>
+          {% endfor %}
         </div>
       {% else %}
         <p class="empty">No inventory yet. Add a few staples to test the flow.</p>

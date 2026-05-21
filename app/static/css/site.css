@@ -174,6 +174,29 @@ button.ghost:hover {
   color: var(--ink);
 }
 
+.confirming-delete {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.confirm-delete-prompt {
+  color: var(--warn);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.confirming-delete button[type="submit"] {
+  background: #8b2f24;
+  border: 1px solid #8b2f24;
+  padding: 7px 10px;
+}
+
+.confirming-delete button[type="submit"]:hover {
+  background: #6f261d;
+}
+
 button:disabled {
   background: #e3e8e3;
   border: 1px solid #d4dcd5;
@@ -244,6 +267,12 @@ button:disabled:hover {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.panel-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
 }
 
 .panel-heading a {
@@ -318,6 +347,13 @@ small {
   grid-template-columns: minmax(0, 900px);
 }
 
+.grocery-detail-layout {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1120px;
+}
+
 .form-panel {
   align-self: start;
   display: grid;
@@ -362,6 +398,84 @@ textarea {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
+.form-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.receipt-upload {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.receipt-upload-status {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: -8px;
+}
+
+.js-clearable-form[data-empty="true"] .js-clear-form {
+  opacity: 0.55;
+}
+
+.confirming-clear .confirm-clear-prompt {
+  color: var(--warn);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.confirming-clear .confirm-clear-yes {
+  background: #8b2f24;
+  border: 1px solid #8b2f24;
+  padding: 7px 10px;
+}
+
+.compact-heading {
+  margin-bottom: 10px;
+}
+
+.form-heading {
+  margin-bottom: 0;
+}
+
+.line-item-builder {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.line-item-builder-rows {
+  display: grid;
+  gap: 12px;
+}
+
+.line-item-builder-row {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(150px, 1.4fr) minmax(72px, 0.5fr) minmax(72px, 0.5fr) minmax(88px, 0.7fr) minmax(150px, 1fr) auto;
+  padding-top: 12px;
+}
+
+.line-item-builder-row label {
+  font-size: 0.78rem;
+}
+
+.line-item-builder-row input {
+  padding: 8px 9px;
+}
+
+.line-item-builder-row button {
+  align-self: end;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -388,6 +502,97 @@ th {
 
 td form {
   margin: 0;
+}
+
+.purchase-list,
+.inventory-list {
+  display: grid;
+  gap: 10px;
+}
+
+.purchase-row,
+.inventory-row {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-top: 12px;
+}
+
+.inventory-readonly {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(160px, 1fr) minmax(220px, auto);
+}
+
+.purchase-main,
+.inventory-main {
+  min-width: 0;
+}
+
+.purchase-main a {
+  text-decoration: none;
+}
+
+.purchase-meta,
+.inventory-meta {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.purchase-row form,
+.inventory-row form {
+  margin: 0;
+}
+
+.inventory-fields {
+  display: none;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  min-width: 0;
+}
+
+.editable-section.is-editing .inventory-row {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.editable-section.is-editing .inventory-fields {
+  display: grid;
+}
+
+.editable-section.is-editing .inventory-readonly {
+  display: none;
+}
+
+.inventory-row > .js-confirm-delete {
+  display: none;
+}
+
+.editable-section.is-editing .inventory-row > .js-confirm-delete {
+  display: block;
+  justify-self: start;
+}
+
+.inventory-fields label {
+  font-size: 0.78rem;
+}
+
+.inventory-fields input,
+.inventory-fields select {
+  padding: 8px 9px;
+}
+
+.inventory-fields button {
+  align-self: end;
+  min-height: 34px;
+  padding: 7px 10px;
 }
 
 .detail-list {
@@ -432,6 +637,49 @@ td form {
   padding: 14px;
 }
 
+.suggestion-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.suggestion-list {
+  display: grid;
+  gap: 12px;
+}
+
+.suggestion-card {
+  background: #f8faf7;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.suggestion-card-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.suggestion-card h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.suggestion-card h3 a {
+  text-decoration: none;
+}
+
+.suggestion-card-heading span {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.suggestion-card p {
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
 .recipe-card h3 {
   font-size: 1rem;
   line-height: 1.2;
@@ -445,6 +693,26 @@ td form {
 .recipe-card p {
   color: var(--muted);
   margin: 0 0 12px;
+}
+
+.make-it-form {
+  margin-top: 12px;
+}
+
+.add-inventory-form {
+  margin: 0;
+}
+
+.add-inventory-form button {
+  padding: 8px 11px;
+}
+
+.header-action-form {
+  margin: 0;
+}
+
+.make-it-form button {
+  padding: 8px 11px;
 }
 
 .card-meta {
@@ -472,6 +740,42 @@ td form {
   white-space: pre-wrap;
 }
 
+.recipe-edit-form {
+  display: grid;
+  gap: 18px;
+}
+
+.recipe-title-fields {
+  border-top: 1px solid var(--line);
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  padding-top: 14px;
+}
+
+.recipe-meta-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recipe-edit-body textarea {
+  margin-top: 10px;
+}
+
+.recipe-detail-section .recipe-edit-form,
+.recipe-detail-section .delete-form {
+  display: none;
+}
+
+.recipe-detail-section.is-editing .recipe-readonly {
+  display: none;
+}
+
+.recipe-detail-section.is-editing .recipe-edit-form {
+  display: grid;
+}
+
+.recipe-detail-section.is-editing .delete-form {
+  display: block;
+}
+
 .delete-form {
   border-top: 1px solid var(--line);
   margin-top: 22px;
@@ -494,13 +798,43 @@ td form {
 .editable-fields {
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(150px, 1.4fr) minmax(72px, 0.6fr) minmax(72px, 0.6fr) minmax(88px, 0.7fr) minmax(140px, 1fr) auto;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(84px, 0.6fr) minmax(84px, 0.6fr) minmax(96px, 0.7fr) minmax(180px, 1fr) auto;
 }
 
 .purchase-fields {
   border-top: 1px solid var(--line);
   grid-template-columns: minmax(160px, 1.2fr) minmax(130px, 0.8fr) minmax(100px, 0.7fr) minmax(180px, 1.3fr) auto;
   padding-top: 14px;
+}
+
+.purchase-detail-readonly,
+.line-item-readonly {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, auto) auto;
+  padding-top: 12px;
+}
+
+.purchase-detail-section .purchase-fields,
+.purchase-detail-section .editable-row > .editable-fields,
+.purchase-detail-section .inline-delete-form {
+  display: none;
+}
+
+.purchase-detail-section.is-editing .purchase-detail-readonly,
+.purchase-detail-section.is-editing .line-item-readonly {
+  display: none;
+}
+
+.purchase-detail-section.is-editing .purchase-fields,
+.purchase-detail-section.is-editing .editable-row > .editable-fields {
+  display: grid;
+}
+
+.purchase-detail-section.is-editing .inline-delete-form {
+  display: block;
 }
 
 .editable-fields label {
@@ -520,6 +854,34 @@ td form {
 
 .inline-delete-form {
   align-self: end;
+}
+
+@media (max-width: 1350px) {
+  .editable-section.is-editing .inventory-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editable-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editable-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .purchase-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recipe-title-fields,
+  .recipe-meta-fields,
+  .inventory-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inline-delete-form {
+    align-self: stretch;
+  }
 }
 
 @media (max-width: 900px) {
@@ -552,13 +914,38 @@ td form {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .line-item-builder-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .purchase-row,
+  .inventory-row {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inventory-readonly,
+  .purchase-detail-readonly,
+  .line-item-readonly {
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .purchase-meta,
+  .inventory-meta {
+    justify-content: flex-start;
+  }
+
   .detail-list div {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .editable-row,
   .editable-fields,
-  .purchase-fields {
+  .purchase-fields,
+  .recipe-title-fields,
+  .recipe-meta-fields,
+  .inventory-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 

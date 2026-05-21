@@ -5,6 +5,20 @@ function formSnapshot(form) {
     .join("&");
 }
 
+function isFormEmpty(form) {
+  return Array.from(form.elements)
+    .filter((element) => element.name && !element.disabled)
+    .every((element) => !element.value.trim());
+}
+
+function updateFormEmptyState(form) {
+  const empty = isFormEmpty(form);
+  form.dataset.empty = empty ? "true" : "false";
+  form.querySelectorAll("[data-enable-when-empty]").forEach((element) => {
+    element.disabled = !empty;
+  });
+}
+
 function wireDirtyForms() {
   document.querySelectorAll(".js-dirty-form").forEach((form) => {
     const submitButton = form.querySelector('button[type="submit"]');
@@ -23,4 +37,265 @@ function wireDirtyForms() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", wireDirtyForms);
+function wireConfirmDeleteForms() {
+  document.querySelectorAll(".js-confirm-delete").forEach((form) => {
+    const deleteButton = form.querySelector('button[type="submit"]');
+    if (!deleteButton) {
+      return;
+    }
+
+    const originalText = deleteButton.textContent;
+    let confirming = false;
+
+    form.addEventListener("submit", (event) => {
+      if (confirming) {
+        return;
+      }
+
+      event.preventDefault();
+      confirming = true;
+      form.classList.add("confirming-delete");
+      deleteButton.textContent = "Yes";
+
+      const prompt = document.createElement("span");
+      prompt.className = "confirm-delete-prompt";
+      prompt.textContent = "Are you sure?";
+
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.className = "ghost confirm-delete-cancel";
+      cancelButton.textContent = "No";
+      cancelButton.addEventListener("click", () => {
+        confirming = false;
+        form.classList.remove("confirming-delete");
+        deleteButton.textContent = originalText;
+        prompt.remove();
+        cancelButton.remove();
+      });
+
+      form.prepend(prompt);
+      form.append(cancelButton);
+    });
+
+    updateFormEmptyState(form);
+  });
+}
+
+function wireEditSections() {
+  document.querySelectorAll(".editable-section").forEach((section) => {
+    const toggleButton = section.querySelector(".js-toggle-edit-section");
+    if (!toggleButton) {
+      return;
+    }
+
+    toggleButton.addEventListener("click", () => {
+      const editing = section.classList.toggle("is-editing");
+      toggleButton.textContent = editing ? "Done" : "Edit";
+    });
+  });
+}
+
+function createLineItemRow(values = {}) {
+  const row = document.createElement("div");
+  row.className = "line-item-builder-row";
+  row.innerHTML = `
+    <label>
+      Name
+      <input name="item_name" required placeholder="Greek yogurt">
+    </label>
+    <label>
+      Qty
+      <input name="item_quantity" inputmode="decimal" placeholder="2">
+    </label>
+    <label>
+      Unit
+      <input name="item_unit" placeholder="cups">
+    </label>
+    <label>
+      Price
+      <input name="item_price" inputmode="decimal" placeholder="5.99">
+    </label>
+    <label>
+      Notes
+      <input name="item_notes" placeholder="Brand, sale, substitute">
+    </label>
+    <button class="ghost js-remove-line-item" type="button">Remove</button>
+  `;
+  row.querySelector(".js-remove-line-item").addEventListener("click", () => {
+    const form = row.closest("form");
+    row.remove();
+    if (form) {
+      updateFormEmptyState(form);
+    }
+  });
+  row.querySelector('[name="item_name"]').value = values.name || "";
+  row.querySelector('[name="item_quantity"]').value = values.quantity || "";
+  row.querySelector('[name="item_unit"]').value = values.unit || "";
+  row.querySelector('[name="item_price"]').value = values.price || "";
+  row.querySelector('[name="item_notes"]').value = values.notes || "";
+  return row;
+}
+
+function wireLineItemBuilders() {
+  document.querySelectorAll(".line-item-builder").forEach((builder) => {
+    const addButton = builder.querySelector(".js-add-line-item");
+    const rows = builder.querySelector("[data-line-item-rows]");
+    if (!addButton || !rows) {
+      return;
+    }
+
+    addButton.addEventListener("click", () => {
+      rows.append(createLineItemRow());
+      const form = builder.closest("form");
+      if (form) {
+        updateFormEmptyState(form);
+      }
+    });
+  });
+}
+
+function wireClearableForms() {
+  document.querySelectorAll(".js-clearable-form").forEach((form) => {
+    const clearButton = form.querySelector(".js-clear-form");
+    const lineItemRows = form.querySelector("[data-line-item-rows]");
+    if (!clearButton) {
+      return;
+    }
+
+    let confirming = false;
+    const originalText = clearButton.textContent;
+
+    const resetClearState = () => {
+      confirming = false;
+      form.classList.remove("confirming-clear");
+      clearButton.textContent = originalText;
+      form.querySelector(".confirm-clear-prompt")?.remove();
+      form.querySelector(".confirm-clear-yes")?.remove();
+    };
+
+    const clearForm = () => {
+      form.reset();
+      if (lineItemRows) {
+        lineItemRows.innerHTML = "";
+      }
+      resetClearState();
+      updateFormEmptyState(form);
+    };
+
+    form.addEventListener("input", () => updateFormEmptyState(form));
+    form.addEventListener("change", () => updateFormEmptyState(form));
+
+    clearButton.addEventListener("click", () => {
+      if (confirming) {
+        resetClearState();
+        return;
+      }
+      if (isFormEmpty(form)) {
+        return;
+      }
+
+      confirming = true;
+      form.classList.add("confirming-clear");
+      clearButton.textContent = "No";
+
+      const prompt = document.createElement("span");
+      prompt.className = "confirm-clear-prompt";
+      prompt.textContent = "Are you sure?";
+
+      const yesButton = document.createElement("button");
+      yesButton.type = "button";
+      yesButton.className = "confirm-clear-yes";
+      yesButton.textContent = "Yes";
+      yesButton.addEventListener("click", clearForm);
+
+      clearButton.before(prompt);
+      clearButton.before(yesButton);
+    });
+
+    updateFormEmptyState(form);
+  });
+}
+
+function populatePurchaseFormFromReceipt(form, preview) {
+  form.querySelector('[name="store"]').value = preview.merchant || "";
+  form.querySelector('[name="total_amount"]').value = preview.total || "";
+
+  const rows = form.querySelector("[data-line-item-rows]");
+  if (rows) {
+    rows.innerHTML = "";
+    (preview.items || []).forEach((item) => {
+      rows.append(createLineItemRow(item));
+    });
+  }
+
+  updateFormEmptyState(form);
+}
+
+function wireReceiptUploads() {
+  document.querySelectorAll(".add-purchase-form").forEach((form) => {
+    const uploadButton = form.querySelector(".js-upload-receipt");
+    const fileInput = form.querySelector(".js-receipt-file");
+    const status = form.querySelector("[data-receipt-status]");
+    if (!uploadButton || !fileInput) {
+      return;
+    }
+
+    uploadButton.dataset.enableWhenEmpty = "true";
+
+    uploadButton.addEventListener("click", () => {
+      if (!isFormEmpty(form)) {
+        return;
+      }
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        return;
+      }
+
+      if (status) {
+        status.textContent = "Parsing receipt...";
+        status.hidden = false;
+      }
+      uploadButton.disabled = true;
+
+      const formData = new FormData();
+      formData.append("receipt_image", file);
+
+      try {
+        const response = await fetch("/groceries/parse-receipt", {
+          method: "POST",
+          body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Receipt parsing failed.");
+        }
+        populatePurchaseFormFromReceipt(form, payload);
+        if (status) {
+          status.textContent = "Receipt parsed. Review before adding purchase.";
+          status.hidden = false;
+        }
+      } catch (error) {
+        if (status) {
+          status.textContent = error.message;
+          status.hidden = false;
+        }
+      } finally {
+        fileInput.value = "";
+        updateFormEmptyState(form);
+      }
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  wireDirtyForms();
+  wireConfirmDeleteForms();
+  wireEditSections();
+  wireLineItemBuilders();
+  wireClearableForms();
+  wireReceiptUploads();
+});

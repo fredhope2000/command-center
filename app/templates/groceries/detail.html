@@ -3,38 +3,24 @@
 {% block page_title %}{{ purchase.store }}{% endblock %}
 
 {% block content %}
-  <section class="entry-layout">
-    <form class="panel form-panel" action="/groceries/{{ purchase.id }}/items" method="post">
-      <h2>Add Line Item</h2>
-      <label>
-        Name
-        <input name="name" required placeholder="Bananas">
-      </label>
-      <div class="form-row">
-        <label>
-          Quantity
-          <input name="quantity" inputmode="decimal" placeholder="6">
-        </label>
-        <label>
-          Unit
-          <input name="unit" placeholder="ct, lb, bag">
-        </label>
-      </div>
-      <label>
-        Price
-        <input name="price" inputmode="decimal" placeholder="3.49">
-      </label>
-      <label>
-        Notes
-        <textarea name="notes" rows="3" placeholder="Brand, sale, substitute"></textarea>
-      </label>
-      <button type="submit">Add line item</button>
-    </form>
-
-    <section class="panel inventory-panel">
+  <section class="grocery-detail-layout">
+    <section class="panel inventory-panel editable-section purchase-detail-section">
       <div class="panel-heading">
         <h2>Purchase Details</h2>
-        <a href="/groceries/">Back</a>
+        <div class="panel-actions">
+          <button class="ghost js-toggle-edit-section" type="button">Edit</button>
+          <a href="/groceries/">Back</a>
+        </div>
+      </div>
+      <div class="purchase-detail-readonly">
+        <div class="purchase-main">
+          <strong>{{ purchase.store }}</strong>
+          {% if purchase.notes %}<small>{{ purchase.notes }}</small>{% endif %}
+        </div>
+        <div class="purchase-meta">
+          <span>{{ purchase.purchase_date }}</span>
+          {% if purchase.total_amount %}<span>${{ "%.2f"|format(purchase.total_amount|float) }}</span>{% endif %}
+        </div>
       </div>
       <form class="editable-fields purchase-fields js-dirty-form" action="/groceries/{{ purchase.id }}" method="post">
         <label>
@@ -64,6 +50,24 @@
         <div class="editable-list">
           {% for item in purchase.items %}
             <div class="editable-row">
+              <div class="line-item-readonly">
+                <div class="inventory-main">
+                  <strong>{{ item.name }}</strong>
+                  {% if item.notes %}<small>{{ item.notes }}</small>{% endif %}
+                </div>
+                <div class="inventory-meta">
+                  {% if item.quantity %}<span>{{ item.quantity|compact_number }} {{ item.unit or "" }}</span>{% endif %}
+                  {% if item.price %}<span>${{ "%.2f"|format(item.price|float) }}</span>{% endif %}
+                  {% if item.inventory_item_id %}
+                    <span class="pill">Added to inventory</span>
+                  {% endif %}
+                </div>
+                {% if not item.inventory_item_id %}
+                  <form class="add-inventory-form" action="/groceries/{{ purchase.id }}/items/{{ item.id }}/add-to-inventory" method="post">
+                    <button type="submit">Add to inventory</button>
+                  </form>
+                {% endif %}
+              </div>
               <form class="editable-fields js-dirty-form" action="/groceries/{{ purchase.id }}/items/{{ item.id }}" method="post">
                 <label>
                   Name
@@ -71,7 +75,7 @@
                 </label>
                 <label>
                   Qty
-                  <input name="quantity" inputmode="decimal" value="{% if item.quantity %}{{ item.quantity|float }}{% endif %}">
+                  <input name="quantity" inputmode="decimal" value="{% if item.quantity %}{{ item.quantity|compact_number }}{% endif %}">
                 </label>
                 <label>
                   Unit
@@ -87,7 +91,7 @@
                 </label>
                 <button type="submit" disabled>Save</button>
               </form>
-              <form class="inline-delete-form" action="/groceries/{{ purchase.id }}/items/{{ item.id }}/delete" method="post">
+              <form class="inline-delete-form js-confirm-delete" action="/groceries/{{ purchase.id }}/items/{{ item.id }}/delete" method="post">
                 <button class="ghost" type="submit">Delete</button>
               </form>
             </div>
@@ -97,5 +101,32 @@
         <p class="empty">No line items added yet.</p>
       {% endif %}
     </section>
+
+    <form class="panel form-panel add-line-item-form" action="/groceries/{{ purchase.id }}/items" method="post">
+      <h2>Add Line Item</h2>
+      <label>
+        Name
+        <input name="name" required placeholder="Bananas">
+      </label>
+      <div class="form-row">
+        <label>
+          Quantity
+          <input name="quantity" inputmode="decimal" placeholder="6">
+        </label>
+        <label>
+          Unit
+          <input name="unit" placeholder="ct, lb, bag">
+        </label>
+      </div>
+      <label>
+        Price
+        <input name="price" inputmode="decimal" placeholder="3.49">
+      </label>
+      <label>
+        Notes
+        <textarea name="notes" rows="3" placeholder="Brand, sale, substitute"></textarea>
+      </label>
+      <button type="submit">Add line item</button>
+    </form>
   </section>
 {% endblock %}

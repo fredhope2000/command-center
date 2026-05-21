@@ -3,9 +3,45 @@
 {% block page_title %}Grocery Tracking{% endblock %}
 
 {% block content %}
-  <section class="entry-layout">
-    <form class="panel form-panel" action="/groceries/" method="post">
-      <h2>Add Purchase</h2>
+  <section class="grocery-detail-layout">
+    <section class="panel inventory-panel">
+      <div class="panel-heading">
+        <h2>Recent Purchases</h2>
+        <span>{{ purchases|length }} purchase{{ "" if purchases|length == 1 else "s" }}</span>
+      </div>
+      {% if purchases %}
+        <div class="purchase-list">
+          {% for purchase in purchases %}
+            <article class="purchase-row">
+              <div class="purchase-main">
+                <strong><a href="/groceries/{{ purchase.id }}">{{ purchase.store }}</a></strong>
+                {% if purchase.notes %}<small>{{ purchase.notes }}</small>{% endif %}
+              </div>
+              <div class="purchase-meta">
+                <span>{{ purchase.purchase_date }}</span>
+                {% if purchase.total_amount %}<span>${{ "%.2f"|format(purchase.total_amount|float) }}</span>{% endif %}
+                <span>{{ purchase.items|length }} item{{ "" if purchase.items|length == 1 else "s" }}</span>
+              </div>
+              <form class="js-confirm-delete" action="/groceries/{{ purchase.id }}/delete" method="post">
+                <button class="ghost" type="submit">Delete</button>
+              </form>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty">No grocery purchases yet. Add a trip, then attach line items on its detail page.</p>
+      {% endif %}
+    </section>
+
+    <form class="panel form-panel add-purchase-form js-clearable-form" action="/groceries/" method="post">
+      <div class="panel-heading form-heading">
+        <h2>Add Purchase</h2>
+        <div class="panel-actions">
+          <input class="js-receipt-file" type="file" accept="image/*" capture="environment" hidden>
+          <button class="ghost js-upload-receipt" type="button" disabled>Upload receipt</button>
+        </div>
+      </div>
+      <span class="receipt-upload-status" data-receipt-status hidden></span>
       <label>
         Store
         <input name="store" required placeholder="Trader Joe's">
@@ -24,49 +60,19 @@
         Notes
         <textarea name="notes" rows="3" placeholder="Weekly shop, receipt notes, sale items"></textarea>
       </label>
-      <button type="submit">Add purchase</button>
-    </form>
 
-    <section class="panel inventory-panel">
-      <div class="panel-heading">
-        <h2>Recent Purchases</h2>
-        <span>{{ purchases|length }} purchase{{ "" if purchases|length == 1 else "s" }}</span>
-      </div>
-      {% if purchases %}
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Store</th>
-                <th>Date</th>
-                <th>Total</th>
-                <th>Items</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for purchase in purchases %}
-                <tr>
-                  <td>
-                    <strong><a href="/groceries/{{ purchase.id }}">{{ purchase.store }}</a></strong>
-                    {% if purchase.notes %}<small>{{ purchase.notes }}</small>{% endif %}
-                  </td>
-                  <td>{{ purchase.purchase_date }}</td>
-                  <td>{% if purchase.total_amount %}${{ "%.2f"|format(purchase.total_amount|float) }}{% endif %}</td>
-                  <td>{{ purchase.items|length }}</td>
-                  <td>
-                    <form action="/groceries/{{ purchase.id }}/delete" method="post">
-                      <button class="ghost" type="submit">Delete</button>
-                    </form>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+      <div class="line-item-builder">
+        <div class="panel-heading compact-heading">
+          <h2>Line Items</h2>
+          <button class="ghost js-add-line-item" type="button">Add line item</button>
         </div>
-      {% else %}
-        <p class="empty">No grocery purchases yet. Add a trip, then attach line items on its detail page.</p>
-      {% endif %}
-    </section>
+        <div class="line-item-builder-rows" data-line-item-rows></div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit">Add purchase</button>
+        <button class="ghost js-clear-form" type="button">Clear</button>
+      </div>
+    </form>
   </section>
 {% endblock %}

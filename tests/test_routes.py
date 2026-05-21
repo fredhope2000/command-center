@@ -51,6 +51,26 @@ def test_food_item_can_be_created(client: TestClient) -> None:
 
     assert response.status_code == 303
 
+    update_response = client.post(
+        "/food/1",
+        data={
+            "name": "Updated apples",
+            "quantity": "2",
+            "unit": "ct",
+            "location": "pantry",
+            "category": "Fruit",
+            "expiration_date": "2026-05-30",
+            "notes": "Move after washing",
+        },
+        follow_redirects=False,
+    )
+    assert update_response.status_code == 303
+
+    list_response = client.get("/food/")
+    assert list_response.status_code == 200
+    assert "Updated apples" in list_response.text
+    assert "Move after washing" in list_response.text
+
 
 def test_grocery_purchase_can_be_created(client: TestClient) -> None:
     response = client.post(
@@ -60,11 +80,21 @@ def test_grocery_purchase_can_be_created(client: TestClient) -> None:
             "purchase_date": "2026-05-20",
             "total_amount": "12.34",
             "notes": "",
+            "item_name": ["Bananas", "Greek yogurt"],
+            "item_quantity": ["6", "2"],
+            "item_unit": ["ct", "cups"],
+            "item_price": ["2.49", "5.99"],
+            "item_notes": ["", "Plain"],
         },
         follow_redirects=False,
     )
 
     assert response.status_code == 303
+
+    detail_response = client.get("/groceries/1")
+    assert detail_response.status_code == 200
+    assert "Bananas" in detail_response.text
+    assert "Greek yogurt" in detail_response.text
 
 
 def test_grocery_purchase_and_line_item_can_be_edited(client: TestClient) -> None:
@@ -126,6 +156,107 @@ def test_grocery_purchase_and_line_item_can_be_edited(client: TestClient) -> Non
     assert "Honeycrisp" in detail_response.text
 
 
+def test_grocery_line_item_can_be_added_to_inventory_once(client: TestClient) -> None:
+    client.post(
+        "/food/",
+        data={
+            "name": "Greek yogurt",
+            "quantity": "1",
+            "unit": "cups",
+            "location": "fridge",
+            "category": "Dairy",
+            "expiration_date": "",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/groceries/",
+        data={
+            "store": "Trader Joe's",
+            "purchase_date": "2026-05-21",
+            "total_amount": "",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/groceries/1/items",
+        data={
+            "name": "Greek yogurt",
+            "quantity": "2",
+            "unit": "cup",
+            "price": "",
+            "notes": "",
+        },
+    )
+
+    add_response = client.post(
+        "/groceries/1/items/1/add-to-inventory",
+        follow_redirects=False,
+    )
+    assert add_response.status_code == 303
+
+    repeat_response = client.post(
+        "/groceries/1/items/1/add-to-inventory",
+        follow_redirects=False,
+    )
+    assert repeat_response.status_code == 303
+
+    inventory_response = client.get("/food/")
+    assert inventory_response.status_code == 200
+    assert "Greek yogurt" in inventory_response.text
+    assert 'value="3"' in inventory_response.text
+    assert "Last added from Trader Joe&#39;s purchase on 2026-05-21" in inventory_response.text
+
+    purchase_response = client.get("/groceries/1")
+    assert purchase_response.status_code == 200
+    assert "Added to inventory" in purchase_response.text
+    assert "Add to inventory" not in purchase_response.text
+
+
+def test_grocery_line_item_merges_gal_with_cups(client: TestClient) -> None:
+    client.post(
+        "/food/",
+        data={
+            "name": "Milk",
+            "quantity": "1",
+            "unit": "gal",
+            "location": "fridge",
+            "category": "Dairy",
+            "expiration_date": "",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/groceries/",
+        data={
+            "store": "Costco",
+            "purchase_date": "2026-05-21",
+            "total_amount": "",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/groceries/1/items",
+        data={
+            "name": "Milk",
+            "quantity": "4",
+            "unit": "cups",
+            "price": "",
+            "notes": "",
+        },
+    )
+
+    response = client.post(
+        "/groceries/1/items/1/add-to-inventory",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    inventory_response = client.get("/food/")
+    assert inventory_response.status_code == 200
+    assert 'value="1.25"' in inventory_response.text
+
+
 def test_recipe_can_be_created(client: TestClient) -> None:
     response = client.post(
         "/recipes/",
@@ -134,7 +265,9 @@ def test_recipe_can_be_created(client: TestClient) -> None:
             "source": "",
             "cuisine": "",
             "tags": "weeknight",
-            "calories": "",
+            "servings": "4",
+            "shelf_life_days": "3",
+            "calories_per_serving": "",
             "prep_time_minutes": "",
             "cook_time_minutes": "",
             "ingredients": "Rice",
@@ -145,3 +278,80 @@ def test_recipe_can_be_created(client: TestClient) -> None:
     )
 
     assert response.status_code == 303
+
+    detail_response = client.get("/recipes/1")
+    assert detail_response.status_code == 200
+    assert 'name="servings"' in detail_response.text
+    assert 'value="4"' in detail_response.text
+
+    update_response = client.post(
+        "/recipes/1",
+        data={
+            "title": "Updated dinner",
+            "source": "Family notes",
+            "cuisine": "Simple",
+            "tags": "weeknight",
+            "servings": "2",
+            "shelf_life_days": "5",
+            "calories_per_serving": "400",
+            "prep_time_minutes": "10",
+            "cook_time_minutes": "20",
+            "ingredients": "Rice\nChicken",
+            "instructions": "Cook together.",
+            "notes": "Good leftovers.",
+        },
+        follow_redirects=False,
+    )
+    assert update_response.status_code == 303
+
+    updated_detail_response = client.get("/recipes/1")
+    assert updated_detail_response.status_code == 200
+    assert "Updated dinner" in updated_detail_response.text
+    assert "Good leftovers." in updated_detail_response.text
+
+    make_response = client.post("/recipes/1/make", follow_redirects=False)
+    assert make_response.status_code == 303
+
+    inventory_response = client.get("/food/")
+    assert inventory_response.status_code == 200
+    assert "Updated dinner" in inventory_response.text
+    assert "Prepared meal" in inventory_response.text
+
+
+def test_recipe_suggestions_render(client: TestClient) -> None:
+    client.post(
+        "/food/",
+        data={
+            "name": "Rice",
+            "quantity": "1",
+            "unit": "bag",
+            "location": "pantry",
+            "category": "Staple",
+            "expiration_date": "",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/recipes/",
+        data={
+            "title": "Rice bowl",
+            "source": "",
+            "cuisine": "",
+            "tags": "",
+            "servings": "2",
+            "shelf_life_days": "",
+            "calories_per_serving": "",
+            "prep_time_minutes": "",
+            "cook_time_minutes": "",
+            "ingredients": "Rice\nChicken",
+            "instructions": "",
+            "notes": "",
+        },
+    )
+
+    response = client.get("/recipes/suggestions")
+
+    assert response.status_code == 200
+    assert "Recipe Suggestions" in response.text
+    assert "Rice bowl" in response.text
+    assert "rice" in response.text

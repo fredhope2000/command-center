@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -24,9 +25,19 @@ def create_app() -> FastAPI:
         version = str(int(asset_path.stat().st_mtime)) if asset_path.exists() else "0"
         return f"/static/{path}?v={version}"
 
+    def compact_number(value: object) -> str:
+        if value is None:
+            return ""
+        try:
+            number = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return str(value)
+        return format(number.normalize(), "f")
+
     init_db()
     templates.env.globals["static_asset"] = static_asset
     templates.env.globals["settings"] = settings
+    templates.env.filters["compact_number"] = compact_number
     app.include_router(pages_router)
     app.include_router(food_router)
     app.include_router(groceries_router)

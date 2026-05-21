@@ -71,6 +71,33 @@ def create_food_item(
     return RedirectResponse("/food/", status_code=303)
 
 
+@router.post("/{item_id}")
+def update_food_item(
+    item_id: int,
+    name: str = Form(...),
+    quantity: str = Form(""),
+    unit: str = Form(""),
+    location: FoodLocation = Form(FoodLocation.PANTRY),
+    category: str = Form(""),
+    expiration_date: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    item = db.get(FoodItem, item_id)
+    if item is None:
+        return RedirectResponse("/food/", status_code=303)
+
+    item.name = name.strip()
+    item.quantity = _parse_optional_decimal(quantity)
+    item.unit = unit.strip() or None
+    item.location = location
+    item.category = category.strip() or None
+    item.expiration_date = _parse_optional_date(expiration_date)
+    item.notes = notes.strip() or None
+    db.commit()
+    return RedirectResponse("/food/", status_code=303)
+
+
 @router.post("/{item_id}/delete")
 def delete_food_item(item_id: int, db: Session = Depends(get_db)):
     item = db.get(FoodItem, item_id)

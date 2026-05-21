@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block page_title %}Recipe Suggestions{% endblock %}
+
+{% block content %}
+  <section class="suggestion-layout">
+    {% for bucket, suggestions in suggestion_buckets.items() %}
+      <section class="panel suggestion-panel">
+        <div class="panel-heading">
+          <h2>{{ bucket }}</h2>
+          <span>{{ suggestions|length }} recipe{{ "" if suggestions|length == 1 else "s" }}</span>
+        </div>
+        {% if suggestions %}
+          <div class="suggestion-list">
+            {% for suggestion in suggestions %}
+              <article class="suggestion-card">
+                <div class="suggestion-card-heading">
+                  <h3><a href="/recipes/{{ suggestion.recipe.id }}">{{ suggestion.recipe.title }}</a></h3>
+                  {% if suggestion.ingredients %}
+                    <span>{{ (suggestion.score * 100)|round|int }}% match</span>
+                  {% endif %}
+                </div>
+                {% if suggestion.matched %}
+                  <p><strong>Have:</strong> {{ suggestion.matched|join(", ") }}</p>
+                {% endif %}
+                {% if suggestion.missing %}
+                  <p><strong>Missing:</strong> {{ suggestion.missing|join(", ") }}</p>
+                {% endif %}
+                {% if not suggestion.ingredients %}
+                  <p class="empty">Add ingredients to this recipe to score it against inventory.</p>
+                {% endif %}
+                <form class="make-it-form" action="/recipes/{{ suggestion.recipe.id }}/make" method="post">
+                  <button type="submit">Make it</button>
+                </form>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="empty">No recipes in this group.</p>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </section>
+{% endblock %}
