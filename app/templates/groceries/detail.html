@@ -36,42 +36,63 @@
         <h2>Purchase Details</h2>
         <a href="/groceries/">Back</a>
       </div>
-      <dl class="detail-list">
-        <div>
-          <dt>Date</dt>
-          <dd>{{ purchase.purchase_date }}</dd>
-        </div>
-        <div>
-          <dt>Total</dt>
-          <dd>{% if purchase.total_amount %}${{ "%.2f"|format(purchase.total_amount|float) }}{% else %}-{% endif %}</dd>
-        </div>
-        {% if purchase.notes %}
-          <div>
-            <dt>Notes</dt>
-            <dd>{{ purchase.notes }}</dd>
-          </div>
-        {% endif %}
-      </dl>
+      <form class="editable-fields purchase-fields js-dirty-form" action="/groceries/{{ purchase.id }}" method="post">
+        <label>
+          Store
+          <input name="store" required value="{{ purchase.store }}">
+        </label>
+        <label>
+          Date
+          <input name="purchase_date" type="date" value="{{ purchase.purchase_date }}">
+        </label>
+        <label>
+          Total
+          <input name="total_amount" inputmode="decimal" value="{% if purchase.total_amount %}{{ '%.2f'|format(purchase.total_amount|float) }}{% endif %}">
+        </label>
+        <label>
+          Notes
+          <input name="notes" value="{{ purchase.notes or '' }}">
+        </label>
+        <button type="submit" disabled>Save</button>
+      </form>
 
       <div class="panel-heading section-heading">
         <h2>Line Items</h2>
         <span>{{ purchase.items|length }} items</span>
       </div>
       {% if purchase.items %}
-        <ul class="item-list">
+        <div class="editable-list">
           {% for item in purchase.items %}
-            <li>
-              <span>
-                <strong>{{ item.name }}</strong>
-                <small>
-                  {% if item.quantity %}{{ item.quantity|float }} {{ item.unit or "" }}{% endif %}
-                  {% if item.notes %}{% if item.quantity %} · {% endif %}{{ item.notes }}{% endif %}
-                </small>
-              </span>
-              {% if item.price %}<span>${{ "%.2f"|format(item.price|float) }}</span>{% endif %}
-            </li>
+            <div class="editable-row">
+              <form class="editable-fields js-dirty-form" action="/groceries/{{ purchase.id }}/items/{{ item.id }}" method="post">
+                <label>
+                  Name
+                  <input name="name" required value="{{ item.name }}">
+                </label>
+                <label>
+                  Qty
+                  <input name="quantity" inputmode="decimal" value="{% if item.quantity %}{{ item.quantity|float }}{% endif %}">
+                </label>
+                <label>
+                  Unit
+                  <input name="unit" value="{{ item.unit or '' }}">
+                </label>
+                <label>
+                  Price
+                  <input name="price" inputmode="decimal" value="{% if item.price %}{{ '%.2f'|format(item.price|float) }}{% endif %}">
+                </label>
+                <label>
+                  Notes
+                  <input name="notes" value="{{ item.notes or '' }}">
+                </label>
+                <button type="submit" disabled>Save</button>
+              </form>
+              <form class="inline-delete-form" action="/groceries/{{ purchase.id }}/items/{{ item.id }}/delete" method="post">
+                <button class="ghost" type="submit">Delete</button>
+              </form>
+            </div>
           {% endfor %}
-        </ul>
+        </div>
       {% else %}
         <p class="empty">No line items added yet.</p>
       {% endif %}

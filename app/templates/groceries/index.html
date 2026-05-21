@@ -30,7 +30,7 @@
     <section class="panel inventory-panel">
       <div class="panel-heading">
         <h2>Recent Purchases</h2>
-        <span>{{ purchases|length }} purchases</span>
+        <span>{{ purchases|length }} purchase{{ "" if purchases|length == 1 else "s" }}</span>
       </div>
       {% if purchases %}
         <div class="table-wrap">

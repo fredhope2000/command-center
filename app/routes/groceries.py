@@ -65,6 +65,27 @@ def create_purchase(
     return RedirectResponse("/groceries/", status_code=303)
 
 
+@router.post("/{purchase_id}")
+def update_purchase(
+    purchase_id: int,
+    store: str = Form(...),
+    purchase_date: str = Form(""),
+    total_amount: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    purchase = db.get(GroceryPurchase, purchase_id)
+    if purchase is None:
+        return RedirectResponse("/groceries/", status_code=303)
+
+    purchase.store = store.strip()
+    purchase.purchase_date = _parse_date(purchase_date)
+    purchase.total_amount = _parse_optional_decimal(total_amount)
+    purchase.notes = notes.strip() or None
+    db.commit()
+    return RedirectResponse(f"/groceries/{purchase.id}", status_code=303)
+
+
 @router.get("/{purchase_id}")
 def purchase_detail(purchase_id: int, request: Request, db: Session = Depends(get_db)):
     purchase = db.scalar(
@@ -105,6 +126,43 @@ def add_purchase_item(
     db.add(item)
     db.commit()
     return RedirectResponse(f"/groceries/{purchase.id}", status_code=303)
+
+
+@router.post("/{purchase_id}/items/{item_id}")
+def update_purchase_item(
+    purchase_id: int,
+    item_id: int,
+    name: str = Form(...),
+    quantity: str = Form(""),
+    unit: str = Form(""),
+    price: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    item = db.get(GroceryPurchaseItem, item_id)
+    if item is None or item.purchase_id != purchase_id:
+        return RedirectResponse(f"/groceries/{purchase_id}", status_code=303)
+
+    item.name = name.strip()
+    item.quantity = _parse_optional_decimal(quantity)
+    item.unit = unit.strip() or None
+    item.price = _parse_optional_decimal(price)
+    item.notes = notes.strip() or None
+    db.commit()
+    return RedirectResponse(f"/groceries/{purchase_id}", status_code=303)
+
+
+@router.post("/{purchase_id}/items/{item_id}/delete")
+def delete_purchase_item(
+    purchase_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+):
+    item = db.get(GroceryPurchaseItem, item_id)
+    if item is not None and item.purchase_id == purchase_id:
+        db.delete(item)
+        db.commit()
+    return RedirectResponse(f"/groceries/{purchase_id}", status_code=303)
 
 
 @router.post("/{purchase_id}/delete")
