@@ -21,10 +21,10 @@
                   {% endif %}
                 </div>
                 {% if suggestion.matched %}
-                  <p><strong>Have:</strong> {{ suggestion.matched|join(", ") }}</p>
+                  <p><strong>Have:</strong> {{ suggestion.matched|map(attribute="label")|join(", ") }}</p>
                 {% endif %}
                 {% if suggestion.missing %}
-                  <p><strong>Missing:</strong> {{ suggestion.missing|join(", ") }}</p>
+                  <p><strong>Missing:</strong> {{ suggestion.missing|map(attribute="label")|join(", ") }}</p>
                 {% endif %}
                 {% if not suggestion.ingredients %}
                   <p class="empty">Add ingredients to this recipe to score it against inventory.</p>

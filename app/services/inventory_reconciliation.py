@@ -7,7 +7,14 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.food import FoodItem, FoodLocation, GroceryPurchase, GroceryPurchaseItem
+from app.models.food import (
+    FoodItem,
+    FoodLocation,
+    GroceryPurchase,
+    GroceryPurchaseItem,
+    Recipe,
+    RecipeIngredient,
+)
 
 UNIT_FACTORS: dict[str, tuple[str, Decimal]] = {
     "tsp": ("volume", Decimal("1")),
@@ -90,6 +97,10 @@ def _conversion_factor(from_unit: str | None, to_unit: str | None) -> Decimal | 
     return from_factor / to_factor
 
 
+def conversion_factor(from_unit: str | None, to_unit: str | None) -> Decimal | None:
+    return _conversion_factor(from_unit, to_unit)
+
+
 def _find_matching_inventory_item(
     db: Session, grocery_item: GroceryPurchaseItem
 ) -> tuple[FoodItem | None, Decimal | None]:
@@ -144,3 +155,32 @@ def add_grocery_item_to_inventory(
     grocery_item.added_to_inventory_at = datetime.utcnow()
     db.commit()
     return inventory_item
+
+
+def _find_inventory_for_recipe_ingredient(
+    db: Session, ingredient: RecipeIngredient
+) -> tuple[FoodItem | None, Decimal | None]:
+    target_name = normalize_name(ingredient.name)
+    candidates = db.scalars(select(FoodItem).order_by(FoodItem.name.asc())).all()
+
+    for item in candidates:
+        if normalize_name(item.name) != target_name:
+            continue
+        factor = _conversion_factor(ingredient.unit, item.unit)
+        if ingredient.quantity is None or factor is not None:
+            return item, factor
+    return None, None
+
+
+def consume_recipe_ingredients(db: Session, recipe: Recipe) -> None:
+    for ingredient in recipe.ingredient_items:
+        if ingredient.quantity is None:
+            continue
+        inventory_item, factor = _find_inventory_for_recipe_ingredient(db, ingredient)
+        if inventory_item is None or factor is None or inventory_item.quantity is None:
+            continue
+
+        outgoing_quantity = Decimal(str(ingredient.quantity)) * factor
+        next_quantity = Decimal(str(inventory_item.quantity)) - outgoing_quantity
+        inventory_item.quantity = max(next_quantity, Decimal("0"))
+        inventory_item.notes = f"Last used for recipe: {recipe.title}"

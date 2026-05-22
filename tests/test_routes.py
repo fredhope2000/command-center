@@ -156,6 +156,96 @@ def test_grocery_purchase_and_line_item_can_be_edited(client: TestClient) -> Non
     assert "Honeycrisp" in detail_response.text
 
 
+def test_grocery_purchase_detail_can_save_all_edits_and_remove_item(
+    client: TestClient,
+) -> None:
+    client.post(
+        "/groceries/",
+        data={
+            "store": "Test market",
+            "purchase_date": "2026-05-20",
+            "total_amount": "12.34",
+            "notes": "",
+            "item_name": ["Bananas", "Milk"],
+            "item_quantity": ["6", "1"],
+            "item_unit": ["ct", "gal"],
+            "item_price": ["2.49", "4.99"],
+            "item_notes": ["", ""],
+        },
+    )
+
+    response = client.post(
+        "/groceries/1",
+        data={
+            "store": "Updated market",
+            "purchase_date": "2026-05-21",
+            "total_amount": "18.50",
+            "notes": "One item removed",
+            "item_id": ["1", "2"],
+            "item_delete": ["true", "false"],
+            "item_name": ["Bananas", "Whole milk"],
+            "item_quantity": ["6", "2"],
+            "item_unit": ["ct", "gal"],
+            "item_price": ["2.49", "9.98"],
+            "item_notes": ["", "Family size"],
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+
+    detail_response = client.get("/groceries/1")
+    assert detail_response.status_code == 200
+    assert "Updated market" in detail_response.text
+    assert "Line Items (1)" in detail_response.text
+    assert 'value="Bananas"' not in detail_response.text
+    assert "Whole milk" in detail_response.text
+    assert "Family size" in detail_response.text
+
+
+def test_grocery_purchase_detail_can_add_line_item_inline(client: TestClient) -> None:
+    client.post(
+        "/groceries/",
+        data={
+            "store": "Test market",
+            "purchase_date": "2026-05-20",
+            "total_amount": "12.34",
+            "notes": "",
+            "item_name": ["Bananas"],
+            "item_quantity": ["6"],
+            "item_unit": ["ct"],
+            "item_price": ["2.49"],
+            "item_notes": [""],
+        },
+    )
+
+    response = client.post(
+        "/groceries/1",
+        data={
+            "store": "Test market",
+            "purchase_date": "2026-05-20",
+            "total_amount": "17.33",
+            "notes": "",
+            "item_id": ["1", ""],
+            "item_delete": ["false", "false"],
+            "item_name": ["Bananas", "Milk"],
+            "item_quantity": ["6", "1"],
+            "item_unit": ["ct", "gal"],
+            "item_price": ["2.49", "4.99"],
+            "item_notes": ["", "Whole"],
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+
+    detail_response = client.get("/groceries/1")
+    assert detail_response.status_code == 200
+    assert "Line Items (2)" in detail_response.text
+    assert "Milk" in detail_response.text
+    assert "Whole" in detail_response.text
+
+
 def test_grocery_line_item_can_be_added_to_inventory_once(client: TestClient) -> None:
     client.post(
         "/food/",
@@ -354,4 +444,52 @@ def test_recipe_suggestions_render(client: TestClient) -> None:
     assert response.status_code == 200
     assert "Recipe Suggestions" in response.text
     assert "Rice bowl" in response.text
-    assert "rice" in response.text
+    assert "Rice" in response.text
+
+
+def test_structured_recipe_ingredients_reduce_inventory(client: TestClient) -> None:
+    client.post(
+        "/food/",
+        data={
+            "name": "Lemon",
+            "quantity": "4",
+            "unit": "ct",
+            "location": "fridge",
+            "category": "Produce",
+            "expiration_date": "",
+            "notes": "",
+        },
+    )
+    client.post(
+        "/recipes/",
+        data={
+            "title": "Lemon pasta",
+            "source": "",
+            "cuisine": "",
+            "tags": "",
+            "servings": "2",
+            "shelf_life_days": "3",
+            "calories_per_serving": "",
+            "prep_time_minutes": "",
+            "cook_time_minutes": "",
+            "ingredient_name": ["Lemon"],
+            "ingredient_quantity": ["2"],
+            "ingredient_unit": ["ct"],
+            "ingredient_notes": ["Juiced"],
+            "instructions": "",
+            "notes": "",
+        },
+    )
+
+    suggestion_response = client.get("/recipes/suggestions")
+    assert suggestion_response.status_code == 200
+    assert "2 ct Lemon" in suggestion_response.text
+    assert "100% match" in suggestion_response.text
+
+    make_response = client.post("/recipes/1/make", follow_redirects=False)
+    assert make_response.status_code == 303
+
+    inventory_response = client.get("/food/")
+    assert inventory_response.status_code == 200
+    assert 'value="2"' in inventory_response.text
+    assert "Lemon pasta" in inventory_response.text

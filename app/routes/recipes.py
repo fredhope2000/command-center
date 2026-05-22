@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models.food import FoodItem, FoodLocation, Recipe
+from app.models.food import FoodItem, FoodLocation, Recipe, RecipeIngredient
 from app.routes.pages import templates
+from app.services.inventory_reconciliation import consume_recipe_ingredients
 from app.services.recipe_suggestions import suggest_recipes
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
@@ -22,9 +23,64 @@ def _parse_optional_int(value: str) -> int | None:
     return int(value)
 
 
+def _parse_optional_float(value: str) -> float | None:
+    value = value.strip()
+    if not value:
+        return None
+    return float(value)
+
+
+def _build_ingredient_items(
+    names: list[str],
+    quantities: list[str],
+    units: list[str],
+    notes: list[str],
+    deletes: list[str] | None = None,
+    legacy_ingredients: str = "",
+) -> list[RecipeIngredient]:
+    items: list[RecipeIngredient] = []
+    for index, raw_name in enumerate(names):
+        if deletes is not None and index < len(deletes) and deletes[index] == "true":
+            continue
+        name = raw_name.strip()
+        if not name:
+            continue
+        items.append(
+            RecipeIngredient(
+                name=name,
+                quantity=_parse_optional_float(quantities[index])
+                if index < len(quantities)
+                else None,
+                unit=(units[index].strip() or None) if index < len(units) else None,
+                notes=(notes[index].strip() or None) if index < len(notes) else None,
+            )
+        )
+
+    if items or not legacy_ingredients.strip():
+        return items
+
+    return [
+        RecipeIngredient(name=line.strip())
+        for line in legacy_ingredients.splitlines()
+        if line.strip()
+    ]
+
+
+def _form_value(form, key: str) -> str:
+    return str(form.get(key, ""))
+
+
+def _form_list(form, key: str) -> list[str]:
+    return [str(value) for value in form.getlist(key)]
+
+
 @router.get("/")
 def list_recipes(request: Request, db: Session = Depends(get_db)):
-    recipes = db.scalars(select(Recipe).order_by(Recipe.title.asc())).all()
+    recipes = db.scalars(
+        select(Recipe)
+        .options(selectinload(Recipe.ingredient_items))
+        .order_by(Recipe.title.asc())
+    ).all()
     return templates.TemplateResponse(
         request,
         "recipes/index.html",
@@ -33,21 +89,20 @@ def list_recipes(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/")
-def create_recipe(
-    title: str = Form(...),
-    source: str = Form(""),
-    cuisine: str = Form(""),
-    tags: str = Form(""),
-    servings: str = Form(""),
-    shelf_life_days: str = Form(""),
-    calories_per_serving: str = Form(""),
-    prep_time_minutes: str = Form(""),
-    cook_time_minutes: str = Form(""),
-    ingredients: str = Form(""),
-    instructions: str = Form(""),
-    notes: str = Form(""),
-    db: Session = Depends(get_db),
-):
+async def create_recipe(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    title = _form_value(form, "title")
+    source = _form_value(form, "source")
+    cuisine = _form_value(form, "cuisine")
+    tags = _form_value(form, "tags")
+    servings = _form_value(form, "servings")
+    shelf_life_days = _form_value(form, "shelf_life_days")
+    calories_per_serving = _form_value(form, "calories_per_serving")
+    prep_time_minutes = _form_value(form, "prep_time_minutes")
+    cook_time_minutes = _form_value(form, "cook_time_minutes")
+    ingredients = _form_value(form, "ingredients")
+    instructions = _form_value(form, "instructions")
+    notes = _form_value(form, "notes")
     recipe = Recipe(
         title=title.strip(),
         source=source.strip() or None,
@@ -62,29 +117,41 @@ def create_recipe(
         instructions=instructions.strip() or None,
         notes=notes.strip() or None,
     )
+    recipe.ingredient_items = _build_ingredient_items(
+        _form_list(form, "ingredient_name"),
+        _form_list(form, "ingredient_quantity"),
+        _form_list(form, "ingredient_unit"),
+        _form_list(form, "ingredient_notes"),
+        _form_list(form, "ingredient_delete"),
+        ingredients,
+    )
     db.add(recipe)
     db.commit()
     return RedirectResponse("/recipes/", status_code=303)
 
 
 @router.post("/{recipe_id}")
-def update_recipe(
-    recipe_id: int,
-    title: str = Form(...),
-    source: str = Form(""),
-    cuisine: str = Form(""),
-    tags: str = Form(""),
-    servings: str = Form(""),
-    shelf_life_days: str = Form(""),
-    calories_per_serving: str = Form(""),
-    prep_time_minutes: str = Form(""),
-    cook_time_minutes: str = Form(""),
-    ingredients: str = Form(""),
-    instructions: str = Form(""),
-    notes: str = Form(""),
-    db: Session = Depends(get_db),
+async def update_recipe(
+    recipe_id: int, request: Request, db: Session = Depends(get_db)
 ):
-    recipe = db.get(Recipe, recipe_id)
+    form = await request.form()
+    title = _form_value(form, "title")
+    source = _form_value(form, "source")
+    cuisine = _form_value(form, "cuisine")
+    tags = _form_value(form, "tags")
+    servings = _form_value(form, "servings")
+    shelf_life_days = _form_value(form, "shelf_life_days")
+    calories_per_serving = _form_value(form, "calories_per_serving")
+    prep_time_minutes = _form_value(form, "prep_time_minutes")
+    cook_time_minutes = _form_value(form, "cook_time_minutes")
+    ingredients = _form_value(form, "ingredients")
+    instructions = _form_value(form, "instructions")
+    notes = _form_value(form, "notes")
+    recipe = db.scalar(
+        select(Recipe)
+        .options(selectinload(Recipe.ingredient_items))
+        .where(Recipe.id == recipe_id)
+    )
     if recipe is None:
         return RedirectResponse("/recipes/", status_code=303)
 
@@ -98,6 +165,14 @@ def update_recipe(
     recipe.prep_time_minutes = _parse_optional_int(prep_time_minutes)
     recipe.cook_time_minutes = _parse_optional_int(cook_time_minutes)
     recipe.ingredients = ingredients.strip() or None
+    recipe.ingredient_items = _build_ingredient_items(
+        _form_list(form, "ingredient_name"),
+        _form_list(form, "ingredient_quantity"),
+        _form_list(form, "ingredient_unit"),
+        _form_list(form, "ingredient_notes"),
+        _form_list(form, "ingredient_delete"),
+        ingredients,
+    )
     recipe.instructions = instructions.strip() or None
     recipe.notes = notes.strip() or None
     db.commit()
@@ -106,7 +181,11 @@ def update_recipe(
 
 @router.post("/{recipe_id}/make")
 def make_recipe(recipe_id: int, db: Session = Depends(get_db)):
-    recipe = db.get(Recipe, recipe_id)
+    recipe = db.scalar(
+        select(Recipe)
+        .options(selectinload(Recipe.ingredient_items))
+        .where(Recipe.id == recipe_id)
+    )
     if recipe is None:
         return RedirectResponse("/recipes/", status_code=303)
 
@@ -124,13 +203,18 @@ def make_recipe(recipe_id: int, db: Session = Depends(get_db)):
         notes=f"Made from recipe: {recipe.title}",
     )
     db.add(item)
+    consume_recipe_ingredients(db, recipe)
     db.commit()
     return RedirectResponse("/food/", status_code=303)
 
 
 @router.get("/suggestions")
 def recipe_suggestions(request: Request, db: Session = Depends(get_db)):
-    recipes = db.scalars(select(Recipe).order_by(Recipe.title.asc())).all()
+    recipes = db.scalars(
+        select(Recipe)
+        .options(selectinload(Recipe.ingredient_items))
+        .order_by(Recipe.title.asc())
+    ).all()
     inventory_items = db.scalars(select(FoodItem).order_by(FoodItem.name.asc())).all()
     return templates.TemplateResponse(
         request,
@@ -144,7 +228,11 @@ def recipe_suggestions(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/{recipe_id}")
 def recipe_detail(recipe_id: int, request: Request, db: Session = Depends(get_db)):
-    recipe = db.get(Recipe, recipe_id)
+    recipe = db.scalar(
+        select(Recipe)
+        .options(selectinload(Recipe.ingredient_items))
+        .where(Recipe.id == recipe_id)
+    )
     if recipe is None:
         return RedirectResponse("/recipes/", status_code=303)
     return templates.TemplateResponse(

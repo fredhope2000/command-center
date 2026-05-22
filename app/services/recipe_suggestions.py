@@ -1,42 +1,47 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
+from decimal import Decimal
 
-from app.models.food import FoodItem, Recipe
+from app.models.food import FoodItem, Recipe, RecipeIngredient
+from app.services.inventory_reconciliation import (
+    conversion_factor,
+    normalize_name,
+)
 
-STOP_WORDS = {
-    "and",
-    "as",
-    "chopped",
-    "clove",
-    "cloves",
-    "cup",
-    "cups",
-    "diced",
-    "for",
-    "fresh",
-    "large",
-    "lb",
-    "lbs",
-    "medium",
-    "minced",
-    "of",
-    "optional",
-    "oz",
-    "small",
-    "tbsp",
-    "tsp",
-    "to",
-}
+
+def _format_quantity(value) -> str:
+    quantity = Decimal(str(value))
+    if quantity == quantity.to_integral():
+        return str(int(quantity))
+    return format(quantity.normalize(), "f")
+
+
+@dataclass(frozen=True)
+class IngredientMatch:
+    ingredient: RecipeIngredient
+    status: str
+
+    @property
+    def label(self) -> str:
+        parts = []
+        if self.ingredient.quantity is not None:
+            parts.append(_format_quantity(self.ingredient.quantity))
+        if self.ingredient.unit:
+            parts.append(self.ingredient.unit)
+        parts.append(self.ingredient.name)
+        label = " ".join(parts)
+        if self.status == "not enough":
+            return f"{label} (not enough)"
+        return label
 
 
 @dataclass(frozen=True)
 class RecipeSuggestion:
     recipe: Recipe
-    ingredients: list[str]
-    matched: list[str]
-    missing: list[str]
+    ingredients: list[RecipeIngredient]
+    matched: list[IngredientMatch]
+    missing: list[IngredientMatch]
     score: float
 
     @property
@@ -50,71 +55,66 @@ class RecipeSuggestion:
         return "Missing several items"
 
 
-def _normalize(value: str) -> str:
-    value = re.sub(r"[^a-z0-9\s]", " ", value.lower())
-    words = [
-        word[:-1] if word.endswith("s") and len(word) > 3 else word
-        for word in value.split()
-        if not word.isdigit() and word not in STOP_WORDS
-    ]
-    return " ".join(words).strip()
-
-
-def _parse_ingredients(ingredients: str | None) -> list[str]:
-    if not ingredients:
+def _legacy_ingredients(recipe: Recipe) -> list[RecipeIngredient]:
+    if not recipe.ingredients:
         return []
-
-    parsed: list[str] = []
-    for raw_line in ingredients.splitlines():
-        line = _normalize(raw_line)
-        if line:
-            parsed.append(line)
-    return parsed
+    return [
+        RecipeIngredient(name=line.strip())
+        for line in recipe.ingredients.splitlines()
+        if line.strip()
+    ]
 
 
-def _inventory_terms(items: list[FoodItem]) -> set[str]:
-    terms: set[str] = set()
-    for item in items:
-        for value in (item.name, item.category):
-            if not value:
-                continue
-            normalized = _normalize(value)
-            if normalized:
-                terms.add(normalized)
-    return terms
+def _recipe_ingredients(recipe: Recipe) -> list[RecipeIngredient]:
+    if recipe.ingredient_items:
+        return list(recipe.ingredient_items)
+    return _legacy_ingredients(recipe)
 
 
-def _is_matched(ingredient: str, inventory_terms: set[str]) -> bool:
-    ingredient_words = set(ingredient.split())
-    for term in inventory_terms:
-        term_words = set(term.split())
-        if ingredient in term or term in ingredient:
-            return True
-        if ingredient_words and ingredient_words.issubset(term_words):
-            return True
-        if term_words and term_words.issubset(ingredient_words):
-            return True
-    return False
+def _matching_inventory(
+    ingredient: RecipeIngredient, inventory_items: list[FoodItem]
+) -> tuple[FoodItem | None, Decimal | None]:
+    target_name = normalize_name(ingredient.name)
+    for item in inventory_items:
+        if normalize_name(item.name) != target_name:
+            continue
+        factor = conversion_factor(ingredient.unit, item.unit)
+        if ingredient.quantity is None or factor is not None:
+            return item, factor
+    return None, None
+
+
+def _ingredient_status(
+    ingredient: RecipeIngredient, inventory_items: list[FoodItem]
+) -> IngredientMatch:
+    inventory_item, factor = _matching_inventory(ingredient, inventory_items)
+    if inventory_item is None:
+        return IngredientMatch(ingredient=ingredient, status="missing")
+    if ingredient.quantity is None:
+        return IngredientMatch(ingredient=ingredient, status="matched")
+    if factor is None or inventory_item.quantity is None:
+        return IngredientMatch(ingredient=ingredient, status="missing")
+
+    available = Decimal(str(inventory_item.quantity))
+    needed = Decimal(str(ingredient.quantity)) * factor
+    if available >= needed:
+        return IngredientMatch(ingredient=ingredient, status="matched")
+    return IngredientMatch(ingredient=ingredient, status="not enough")
 
 
 def suggest_recipes(
     recipes: list[Recipe], inventory_items: list[FoodItem]
 ) -> dict[str, list[RecipeSuggestion]]:
-    inventory_terms = _inventory_terms(inventory_items)
     suggestions: list[RecipeSuggestion] = []
 
     for recipe in recipes:
-        ingredients = _parse_ingredients(recipe.ingredients)
-        matched = [
-            ingredient
+        ingredients = _recipe_ingredients(recipe)
+        statuses = [
+            _ingredient_status(ingredient, inventory_items)
             for ingredient in ingredients
-            if _is_matched(ingredient, inventory_terms)
         ]
-        missing = [
-            ingredient
-            for ingredient in ingredients
-            if ingredient not in matched
-        ]
+        matched = [status for status in statuses if status.status == "matched"]
+        missing = [status for status in statuses if status.status != "matched"]
         score = len(matched) / len(ingredients) if ingredients else 0.0
         suggestions.append(
             RecipeSuggestion(

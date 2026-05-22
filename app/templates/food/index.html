@@ -65,7 +65,7 @@
                   {% if item.notes %}<small>{{ item.notes }}</small>{% endif %}
                 </div>
                 <div class="inventory-meta">
-                  {% if item.quantity %}<span>{{ item.quantity|compact_number }} {{ item.unit or "" }}</span>{% endif %}
+                  {% if item.quantity is not none %}<span>{{ item.quantity|compact_number }} {{ item.unit or "" }}</span>{% endif %}
                   <span class="pill">{{ item.location.value }}</span>
                   {% if item.category %}<span>{{ item.category }}</span>{% endif %}
                   {% if item.expiration_date %}<span>Expires {{ item.expiration_date }}</span>{% endif %}
@@ -78,7 +78,7 @@
                 </label>
                 <label>
                   Qty
-                  <input name="quantity" inputmode="decimal" value="{% if item.quantity %}{{ item.quantity|compact_number }}{% endif %}">
+                  <input name="quantity" inputmode="decimal" value="{% if item.quantity is not none %}{{ item.quantity|compact_number }}{% endif %}">
                 </label>
                 <label>
                   Unit

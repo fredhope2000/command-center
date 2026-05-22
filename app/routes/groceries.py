@@ -108,22 +108,82 @@ async def create_purchase(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/{purchase_id}")
-def update_purchase(
+async def update_purchase(
     purchase_id: int,
-    store: str = Form(...),
-    purchase_date: str = Form(""),
-    total_amount: str = Form(""),
-    notes: str = Form(""),
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    purchase = db.get(GroceryPurchase, purchase_id)
+    form = await request.form()
+    purchase = db.scalar(
+        select(GroceryPurchase)
+        .options(selectinload(GroceryPurchase.items))
+        .where(GroceryPurchase.id == purchase_id)
+    )
     if purchase is None:
         return RedirectResponse("/groceries/", status_code=303)
 
-    purchase.store = store.strip()
-    purchase.purchase_date = _parse_date(purchase_date)
-    purchase.total_amount = _parse_optional_decimal(total_amount)
-    purchase.notes = notes.strip() or None
+    purchase.store = str(form.get("store", "")).strip()
+    purchase.purchase_date = _parse_date(str(form.get("purchase_date", "")))
+    purchase.total_amount = _parse_optional_decimal(str(form.get("total_amount", "")))
+    purchase.notes = str(form.get("notes", "")).strip() or None
+
+    item_ids = [str(value) for value in form.getlist("item_id")]
+    item_deletes = [str(value) for value in form.getlist("item_delete")]
+    item_names = [str(value) for value in form.getlist("item_name")]
+    item_quantities = [str(value) for value in form.getlist("item_quantity")]
+    item_units = [str(value) for value in form.getlist("item_unit")]
+    item_prices = [str(value) for value in form.getlist("item_price")]
+    item_notes = [str(value) for value in form.getlist("item_notes")]
+    items_by_id = {str(item.id): item for item in purchase.items}
+    for index, item_id in enumerate(item_ids):
+        item = items_by_id.get(item_id)
+        if not item_id:
+            if index < len(item_deletes) and item_deletes[index] == "true":
+                continue
+            name = item_names[index].strip() if index < len(item_names) else ""
+            if not name:
+                continue
+            db.add(
+                GroceryPurchaseItem(
+                    purchase_id=purchase.id,
+                    name=name,
+                    quantity=_parse_optional_decimal(
+                        item_quantities[index] if index < len(item_quantities) else ""
+                    ),
+                    unit=item_units[index].strip()
+                    if index < len(item_units) and item_units[index].strip()
+                    else None,
+                    price=_parse_optional_decimal(
+                        item_prices[index] if index < len(item_prices) else ""
+                    ),
+                    notes=item_notes[index].strip()
+                    if index < len(item_notes) and item_notes[index].strip()
+                    else None,
+                )
+            )
+            continue
+        if item is None:
+            continue
+        if index < len(item_deletes) and item_deletes[index] == "true":
+            db.delete(item)
+            continue
+        item.name = item_names[index].strip() if index < len(item_names) else item.name
+        item.quantity = _parse_optional_decimal(
+            item_quantities[index] if index < len(item_quantities) else ""
+        )
+        item.unit = (
+            item_units[index].strip()
+            if index < len(item_units) and item_units[index].strip()
+            else None
+        )
+        item.price = _parse_optional_decimal(
+            item_prices[index] if index < len(item_prices) else ""
+        )
+        item.notes = (
+            item_notes[index].strip()
+            if index < len(item_notes) and item_notes[index].strip()
+            else None
+        )
     db.commit()
     return RedirectResponse(f"/groceries/{purchase.id}", status_code=303)
 

@@ -35,6 +35,10 @@
 
       <div class="workspace">
         <header class="topbar">
+          {% set page_back_href %}{% block page_back_href %}{% endblock %}{% endset %}
+          {% if page_back_href|trim %}
+            <a class="page-back" href="{{ page_back_href|trim }}" aria-label="Back">‹</a>
+          {% endif %}
           <div>
             <p class="eyebrow">Private household dashboard</p>
             <h1>{% block page_title %}Command Center{% endblock %}</h1>

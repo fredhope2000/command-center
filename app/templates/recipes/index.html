@@ -48,10 +48,22 @@
           <input name="cook_time_minutes" inputmode="numeric" placeholder="25">
         </label>
       </div>
-      <label>
-        Ingredients
-        <textarea name="ingredients" rows="5" placeholder="One ingredient per line"></textarea>
-      </label>
+      <div
+        class="line-item-builder"
+        data-field-prefix="ingredient"
+        data-include-price="false"
+        data-row-class="recipe-ingredient-builder-row"
+        data-name-placeholder="Lemon"
+        data-quantity-placeholder="2"
+        data-unit-placeholder="ct"
+        data-notes-placeholder="Juiced, zested, optional"
+      >
+        <div class="panel-heading compact-heading">
+          <h2>Ingredients</h2>
+          <button class="ghost js-add-line-item" type="button">Add ingredient</button>
+        </div>
+        <div class="line-item-builder-rows" data-line-item-rows></div>
+      </div>
       <label>
         Instructions
         <textarea name="instructions" rows="5" placeholder="Steps, timing, oven temp"></textarea>

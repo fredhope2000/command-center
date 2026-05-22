@@ -10,7 +10,14 @@ if str(ROOT) not in sys.path:
 
 from app.db import SessionLocal, init_db
 from app.config import settings
-from app.models.food import FoodItem, FoodLocation, GroceryPurchase, GroceryPurchaseItem, Recipe
+from app.models.food import (
+    FoodItem,
+    FoodLocation,
+    GroceryPurchase,
+    GroceryPurchaseItem,
+    Recipe,
+    RecipeIngredient,
+)
 
 
 def main() -> None:
@@ -64,22 +71,20 @@ def main() -> None:
             db.query(Recipe).filter(Recipe.title == "Lemon chicken bowls").one_or_none()
         )
         if lemon_chicken is None:
-            db.add(
-                Recipe(
-                    title="Lemon chicken bowls",
-                    source="Family notes",
-                    cuisine="Mediterranean",
-                    tags="weeknight, high-protein",
-                    servings=4,
-                    shelf_life_days=4,
-                    calories_per_serving=520,
-                    prep_time_minutes=15,
-                    cook_time_minutes=25,
-                    ingredients="Chicken thighs\nBrown rice\nSpinach\nLemon\nGreek yogurt",
-                    instructions="Cook rice. Roast chicken. Wilt spinach. Mix yogurt lemon sauce.",
-                    notes="Good candidate for using pantry rice and freezer chicken.",
-                )
+            lemon_chicken = Recipe(
+                title="Lemon chicken bowls",
+                source="Family notes",
+                cuisine="Mediterranean",
+                tags="weeknight, high-protein",
+                servings=4,
+                shelf_life_days=4,
+                calories_per_serving=520,
+                prep_time_minutes=15,
+                cook_time_minutes=25,
+                instructions="Cook rice. Roast chicken. Wilt spinach. Mix yogurt lemon sauce.",
+                notes="Good candidate for using pantry rice and freezer chicken.",
             )
+            db.add(lemon_chicken)
         else:
             lemon_chicken.servings = lemon_chicken.servings or 4
             lemon_chicken.shelf_life_days = (
@@ -90,6 +95,14 @@ def main() -> None:
             lemon_chicken.calories_per_serving = (
                 lemon_chicken.calories_per_serving or 520
             )
+        if not lemon_chicken.ingredient_items:
+            lemon_chicken.ingredient_items = [
+                RecipeIngredient(name="Chicken thighs", quantity=1, unit="pack"),
+                RecipeIngredient(name="Brown rice", quantity=1, unit="cup"),
+                RecipeIngredient(name="Spinach", quantity=1, unit="box"),
+                RecipeIngredient(name="Lemon", quantity=1, unit="ct"),
+                RecipeIngredient(name="Greek yogurt", quantity=0.5, unit="cup"),
+            ]
 
         existing_purchases = {
             (purchase.store, purchase.purchase_date)

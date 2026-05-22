@@ -21,18 +21,38 @@ function updateFormEmptyState(form) {
 
 function wireDirtyForms() {
   document.querySelectorAll(".js-dirty-form").forEach((form) => {
-    const submitButton = form.querySelector('button[type="submit"]');
-    if (!submitButton) {
-      return;
-    }
+    const submitButton =
+      form.querySelector('button[type="submit"]') ||
+      (form.id ? document.querySelector(`button[form="${form.id}"]`) : null);
 
     const initialSnapshot = formSnapshot(form);
     const updateState = () => {
-      submitButton.disabled = formSnapshot(form) === initialSnapshot;
+      const dirty = formSnapshot(form) !== initialSnapshot;
+      form.dataset.dirty = dirty ? "true" : "false";
+      const section = form.closest(".editable-section");
+      const editing = section?.classList.contains("is-editing") ?? true;
+      if (submitButton && !submitButton.dataset.alwaysEnabled) {
+        submitButton.disabled = editing ? !dirty : false;
+      }
+      if (form.dataset.dirtyDisableSelector) {
+        document
+          .querySelectorAll(form.dataset.dirtyDisableSelector)
+          .forEach((element) => {
+            element.disabled = dirty;
+          });
+      }
+      if (form.dataset.dirtyHideSelector) {
+        document
+          .querySelectorAll(form.dataset.dirtyHideSelector)
+          .forEach((element) => {
+            element.hidden = dirty;
+          });
+      }
     };
 
     form.addEventListener("input", updateState);
     form.addEventListener("change", updateState);
+    form.updateDirtyState = updateState;
     updateState();
   });
 }
@@ -88,51 +108,104 @@ function wireEditSections() {
       return;
     }
 
-    toggleButton.addEventListener("click", () => {
+    toggleButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      const form = toggleButton.dataset.editSubmitForm
+        ? document.getElementById(toggleButton.dataset.editSubmitForm)
+        : null;
+
+      if (section.classList.contains("is-editing")) {
+        if (form?.dataset.dirty === "true") {
+          form.requestSubmit();
+          return;
+        }
+        section.classList.remove("is-editing");
+        toggleButton.textContent = "Edit";
+        form?.updateDirtyState?.();
+        return;
+      }
+
       const editing = section.classList.toggle("is-editing");
-      toggleButton.textContent = editing ? "Done" : "Edit";
+      if (toggleButton.dataset.editSubmitForm) {
+        toggleButton.textContent = editing ? "Done" : "Edit";
+      } else {
+        toggleButton.textContent = editing ? "Done" : "Edit";
+      }
+      form?.updateDirtyState?.();
     });
   });
 }
 
-function createLineItemRow(values = {}) {
+function wireStagedRemoveButtons() {
+  document.querySelectorAll(".js-stage-remove").forEach((button) => {
+    button.addEventListener("click", () => {
+      const row = button.closest("[data-staged-row]");
+      const field = row?.querySelector('[data-delete-field]');
+      const form = button.closest("form");
+      if (!row || !(field instanceof HTMLInputElement)) {
+        return;
+      }
+      const deleted = field.value === "true";
+      field.value = deleted ? "false" : "true";
+      row.classList.toggle("is-staged-delete", !deleted);
+      button.textContent = deleted ? "Remove" : "Undo";
+      form?.updateDirtyState?.();
+    });
+  });
+}
+
+function createLineItemRow(values = {}, options = {}) {
+  const prefix = options.prefix || "item";
+  const includePrice = options.includePrice !== false;
   const row = document.createElement("div");
-  row.className = "line-item-builder-row";
+  row.className = options.rowClass || "line-item-builder-row";
+  const fieldsClass = options.fieldsClass || "";
   row.innerHTML = `
-    <label>
-      Name
-      <input name="item_name" required placeholder="Greek yogurt">
-    </label>
-    <label>
-      Qty
-      <input name="item_quantity" inputmode="decimal" placeholder="2">
-    </label>
-    <label>
-      Unit
-      <input name="item_unit" placeholder="cups">
-    </label>
-    <label>
-      Price
-      <input name="item_price" inputmode="decimal" placeholder="5.99">
-    </label>
-    <label>
-      Notes
-      <input name="item_notes" placeholder="Brand, sale, substitute">
-    </label>
-    <button class="ghost js-remove-line-item" type="button">Remove</button>
+    <input type="hidden" name="${prefix}_id" value="">
+    <input type="hidden" name="${prefix}_delete" value="false">
+    <div class="${fieldsClass}">
+      <label>
+        Name
+        <input name="${prefix}_name" required placeholder="${options.namePlaceholder || "Greek yogurt"}">
+      </label>
+      <label>
+        Qty
+        <input name="${prefix}_quantity" inputmode="decimal" placeholder="${options.quantityPlaceholder || "2"}">
+      </label>
+      <label>
+        Unit
+        <input name="${prefix}_unit" placeholder="${options.unitPlaceholder || "cups"}">
+      </label>
+      ${
+        includePrice
+          ? `<label>
+              Price
+              <input name="${prefix}_price" inputmode="decimal" placeholder="5.99">
+            </label>`
+          : ""
+      }
+      <label>
+        Notes
+        <input name="${prefix}_notes" placeholder="${options.notesPlaceholder || "Brand, sale, substitute"}">
+      </label>
+      <button class="ghost js-remove-line-item" type="button">Remove</button>
+    </div>
   `;
   row.querySelector(".js-remove-line-item").addEventListener("click", () => {
     const form = row.closest("form");
     row.remove();
     if (form) {
       updateFormEmptyState(form);
+      form.updateDirtyState?.();
     }
   });
-  row.querySelector('[name="item_name"]').value = values.name || "";
-  row.querySelector('[name="item_quantity"]').value = values.quantity || "";
-  row.querySelector('[name="item_unit"]').value = values.unit || "";
-  row.querySelector('[name="item_price"]').value = values.price || "";
-  row.querySelector('[name="item_notes"]').value = values.notes || "";
+  row.querySelector(`[name="${prefix}_name"]`).value = values.name || "";
+  row.querySelector(`[name="${prefix}_quantity"]`).value = values.quantity || "";
+  row.querySelector(`[name="${prefix}_unit"]`).value = values.unit || "";
+  if (includePrice) {
+    row.querySelector(`[name="${prefix}_price"]`).value = values.price || "";
+  }
+  row.querySelector(`[name="${prefix}_notes"]`).value = values.notes || "";
   return row;
 }
 
@@ -144,11 +217,35 @@ function wireLineItemBuilders() {
       return;
     }
 
+    const options = {
+      prefix: builder.dataset.fieldPrefix || "item",
+      includePrice: builder.dataset.includePrice !== "false",
+      rowClass: builder.dataset.rowClass || "line-item-builder-row",
+      fieldsClass: builder.dataset.fieldsClass || "",
+      namePlaceholder: builder.dataset.namePlaceholder,
+      quantityPlaceholder: builder.dataset.quantityPlaceholder,
+      unitPlaceholder: builder.dataset.unitPlaceholder,
+      notesPlaceholder: builder.dataset.notesPlaceholder,
+    };
+
+    rows.querySelectorAll(".js-remove-line-item").forEach((button) => {
+      button.addEventListener("click", () => {
+        const row = button.closest(".line-item-builder-row, .recipe-ingredient-builder-row, .editable-row");
+        const form = button.closest("form");
+        row?.remove();
+        if (form) {
+          updateFormEmptyState(form);
+          form.updateDirtyState?.();
+        }
+      });
+    });
+
     addButton.addEventListener("click", () => {
-      rows.append(createLineItemRow());
+      rows.append(createLineItemRow({}, options));
       const form = builder.closest("form");
       if (form) {
         updateFormEmptyState(form);
+        form.updateDirtyState?.();
       }
     });
   });
@@ -296,6 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
   wireDirtyForms();
   wireConfirmDeleteForms();
   wireEditSections();
+  wireStagedRemoveButtons();
   wireLineItemBuilders();
   wireClearableForms();
   wireReceiptUploads();
