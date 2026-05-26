@@ -462,14 +462,19 @@ function filteredRestaurants(shell) {
   const categoryFilter = shell.querySelector(
     "[data-restaurant-category-filter]",
   )?.value;
+  const ratingFilter = Number(
+    shell.querySelector("[data-restaurant-rating-filter]")?.value || 0,
+  );
 
   return restaurantState.restaurants.filter((restaurant) => {
     const statusMatches = !statusFilter || restaurant.status === statusFilter;
     const categoryMatches =
       !categoryFilter || restaurant.category === categoryFilter;
+    const ratingMatches =
+      !ratingFilter || Number(restaurant.personal_rating || 0) >= ratingFilter;
     const textMatches =
       !textFilter || restaurantSearchText(restaurant).includes(textFilter);
-    return statusMatches && categoryMatches && textMatches;
+    return statusMatches && categoryMatches && ratingMatches && textMatches;
   });
 }
 
@@ -1017,7 +1022,7 @@ function wireRestaurantMap() {
     return;
   }
 
-  shell.querySelectorAll("[data-restaurant-text-filter], [data-restaurant-status-filter], [data-restaurant-category-filter]").forEach((element) => {
+  shell.querySelectorAll("[data-restaurant-text-filter], [data-restaurant-status-filter], [data-restaurant-category-filter], [data-restaurant-rating-filter]").forEach((element) => {
     element.addEventListener("input", renderRestaurants);
     element.addEventListener("change", renderRestaurants);
   });

@@ -47,6 +47,16 @@
             {% endfor %}
           </select>
         </label>
+        <label>
+          Rating
+          <select data-restaurant-rating-filter>
+            <option value="">All</option>
+            <option value="2">2+</option>
+            <option value="3">3+</option>
+            <option value="4">4+</option>
+            <option value="5">5</option>
+          </select>
+        </label>
         <p class="restaurant-result-count" data-restaurant-result-count>{{ restaurants|length }} of {{ restaurants|length }} {{ 'item' if restaurants|length == 1 else 'items' }} shown</p>
       </div>
 
