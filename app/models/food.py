@@ -131,6 +131,13 @@ class RestaurantStatus(StrEnum):
     PERMANENTLY_CLOSED = "permanently_closed"
 
 
+class RestaurantCategory(StrEnum):
+    PARTY_OF_ONE = "party_of_one"
+    DATE_NIGHT = "date_night"
+    CASUAL_DATES = "casual_dates"
+    DESSERT = "dessert"
+
+
 class Restaurant(Base):
     __tablename__ = "restaurants"
 
@@ -147,6 +154,9 @@ class Restaurant(Base):
     phone_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[RestaurantStatus] = mapped_column(
         Enum(RestaurantStatus), nullable=False, default=RestaurantStatus.WANT_TO_TRY
+    )
+    category: Mapped[RestaurantCategory | None] = mapped_column(
+        Enum(RestaurantCategory), nullable=True
     )
     cuisine: Mapped[str | None] = mapped_column(String(120), nullable=True)
     tags: Mapped[str | None] = mapped_column(String(240), nullable=True)

@@ -469,6 +469,7 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
             "google_maps_uri": "https://maps.google.com/?cid=test",
             "website_uri": "https://example.test",
             "phone_number": "+1 555-0100",
+            "category": "date_night",
         },
     )
 
@@ -490,6 +491,7 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
         "/restaurants/1",
         data={
             "status": "visited",
+            "category": "casual_dates",
             "cuisine": "Italian",
             "tags": "date night, pasta",
             "neighborhood": "Mission",
@@ -507,6 +509,8 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
     assert restaurant["name"] == "Test Bistro"
     assert restaurant["status"] == "visited"
     assert restaurant["status_label"] == "Visited"
+    assert restaurant["category"] == "casual_dates"
+    assert restaurant["category_label"] == "Casual Dates"
     assert restaurant["personal_rating"] == 5
     assert restaurant["notes"] == "Order the rigatoni."
 
@@ -543,6 +547,33 @@ def test_restaurant_legacy_statuses_are_migrated_to_visited(
     assert statuses["Legacy Didnt Like"] == "visited"
     assert statuses["Legacy Favorite"] == "visited"
     assert statuses["Legacy Skip"] == "visited"
+
+
+def test_restaurant_category_column_is_added_to_existing_sqlite_table(
+    client: TestClient,
+) -> None:
+    from sqlalchemy import text
+
+    from app.db import engine, init_db
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE restaurants DROP COLUMN category"))
+
+    init_db()
+
+    response = client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "category-place-1",
+            "name": "Category Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+            "category": "party_of_one",
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["category"] == "party_of_one"
+    assert response.json()["category_label"] == "Party of One"
 
 
 def test_structured_recipe_ingredients_reduce_inventory(client: TestClient) -> None:

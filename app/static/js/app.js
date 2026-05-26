@@ -408,6 +408,17 @@ function restaurantStatusLabel(status) {
   );
 }
 
+function restaurantCategoryLabel(category) {
+  return (
+    {
+      party_of_one: "Party of One",
+      date_night: "Date Night",
+      casual_dates: "Casual Dates",
+      dessert: "Dessert",
+    }[category] || ""
+  );
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -434,6 +445,7 @@ function restaurantSearchText(restaurant) {
     restaurant.neighborhood,
     restaurant.notes,
     restaurant.status_label,
+    restaurant.category_label,
   ]
     .filter(Boolean)
     .join(" ")
@@ -446,12 +458,17 @@ function filteredRestaurants(shell) {
     ?.value.trim()
     .toLowerCase();
   const statusFilter = shell.querySelector("[data-restaurant-status-filter]")?.value;
+  const categoryFilter = shell.querySelector(
+    "[data-restaurant-category-filter]",
+  )?.value;
 
   return restaurantState.restaurants.filter((restaurant) => {
     const statusMatches = !statusFilter || restaurant.status === statusFilter;
+    const categoryMatches =
+      !categoryFilter || restaurant.category === categoryFilter;
     const textMatches =
       !textFilter || restaurantSearchText(restaurant).includes(textFilter);
-    return statusMatches && textMatches;
+    return statusMatches && categoryMatches && textMatches;
   });
 }
 
@@ -471,6 +488,34 @@ function updateRestaurantSavedCount(shell) {
   }
   const total = restaurantState.restaurants.length;
   count.textContent = `${total} saved`;
+}
+
+function resizeRestaurantMap() {
+  if (!restaurantState.map || !window.google?.maps?.event) {
+    return;
+  }
+  window.setTimeout(() => {
+    google.maps.event.trigger(restaurantState.map, "resize");
+  }, 160);
+}
+
+function setRestaurantControlsCollapsed(shell, collapsed) {
+  shell.classList.toggle("is-controls-collapsed", collapsed);
+  const expandButton = shell.querySelector("[data-expand-restaurant-controls]");
+  if (expandButton) {
+    expandButton.hidden = !collapsed;
+  }
+  resizeRestaurantMap();
+}
+
+function showRestaurantAddSearch(shell) {
+  const searchWrap = shell.querySelector("[data-restaurant-add-search]");
+  const searchInput = shell.querySelector("[data-restaurant-place-search]");
+  if (!searchWrap || !searchInput) {
+    return;
+  }
+  searchWrap.hidden = false;
+  window.setTimeout(() => searchInput.focus(), 0);
 }
 
 function selectRestaurant(restaurantId) {
@@ -529,6 +574,22 @@ function selectRestaurant(restaurantId) {
           </select>
         </label>
         <label>
+          Category
+          <select name="category">
+            <option value="">Uncategorized</option>
+            ${["party_of_one", "date_night", "casual_dates", "dessert"]
+              .map(
+                (category) =>
+                  `<option value="${category}" ${
+                    restaurant.category === category ? "selected" : ""
+                  }>${restaurantCategoryLabel(category)}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>
           Rating
           <select name="personal_rating">
             <option value="">Unrated</option>
@@ -542,8 +603,6 @@ function selectRestaurant(restaurantId) {
               .join("")}
           </select>
         </label>
-      </div>
-      <div class="form-row">
         <label>
           Cuisine
           <input name="cuisine" value="${escapeHtml(restaurant.cuisine)}" placeholder="Thai, pizza, sushi">
@@ -583,6 +642,9 @@ function selectRestaurant(restaurantId) {
     .querySelector(".restaurant-detail-form")
     ?.addEventListener("submit", saveRestaurantDetailForm);
   wireConfirmDeleteForms();
+  panel
+    .querySelector(".restaurant-delete-form")
+    ?.addEventListener("submit", deleteRestaurantDetailForm);
 }
 
 async function saveRestaurantDetailForm(event) {
@@ -619,6 +681,28 @@ async function saveRestaurantDetailForm(event) {
   }
 }
 
+async function deleteRestaurantDetailForm(event) {
+  if (event.defaultPrevented) {
+    return;
+  }
+  event.preventDefault();
+  const form = event.currentTarget;
+  const response = await fetch(form.action, {
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || "Could not delete restaurant.");
+  }
+
+  restaurantState.restaurants = restaurantState.restaurants.filter(
+    (restaurant) => restaurant.id !== payload.deleted,
+  );
+  renderRestaurants({ fitMap: false });
+  closeRestaurantDetail();
+}
+
 function renderRestaurantList(shell, restaurants) {
   const list = shell.querySelector("[data-restaurant-list]");
   if (!list) {
@@ -648,7 +732,14 @@ function renderRestaurantList(shell, restaurants) {
             : ""
         }
       </span>
-      <span class="pill">${escapeHtml(restaurant.status_label)}</span>
+      <span class="restaurant-list-pills">
+        <span class="pill">${escapeHtml(restaurant.status_label)}</span>
+        ${
+          restaurant.category_label
+            ? `<span class="pill">${escapeHtml(restaurant.category_label)}</span>`
+            : ""
+        }
+      </span>
     `;
     button.addEventListener("click", () => {
       selectRestaurant(restaurant.id);
@@ -783,6 +874,7 @@ function wireRestaurantAutocomplete(shell) {
       const restaurant = await saveGoogleRestaurant(place);
       await loadRestaurants();
       input.value = "";
+      input.closest("[data-restaurant-add-search]")?.setAttribute("hidden", "");
       selectRestaurant(restaurant.id);
       if (restaurantState.map) {
         restaurantState.map.panTo({
@@ -837,10 +929,19 @@ function wireRestaurantMap() {
     return;
   }
 
-  shell.querySelectorAll("[data-restaurant-text-filter], [data-restaurant-status-filter]").forEach((element) => {
+  shell.querySelectorAll("[data-restaurant-text-filter], [data-restaurant-status-filter], [data-restaurant-category-filter]").forEach((element) => {
     element.addEventListener("input", renderRestaurants);
     element.addEventListener("change", renderRestaurants);
   });
+  shell
+    .querySelector("[data-show-restaurant-add]")
+    ?.addEventListener("click", () => showRestaurantAddSearch(shell));
+  shell
+    .querySelector("[data-collapse-restaurant-controls]")
+    ?.addEventListener("click", () => setRestaurantControlsCollapsed(shell, true));
+  shell
+    .querySelector("[data-expand-restaurant-controls]")
+    ?.addEventListener("click", () => setRestaurantControlsCollapsed(shell, false));
 
   loadRestaurants();
   initRestaurantMapWhenReady();

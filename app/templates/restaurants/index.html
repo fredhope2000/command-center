@@ -12,19 +12,13 @@
     <aside class="restaurant-control-panel">
       <div class="panel-heading">
         <h2>Restaurant Census</h2>
-        <span data-restaurant-saved-count>{{ restaurants|length }} saved</span>
+        <div class="panel-actions">
+          <span data-restaurant-saved-count>{{ restaurants|length }} saved</span>
+          <button class="ghost" type="button" data-collapse-restaurant-controls>Hide</button>
+        </div>
       </div>
 
-      {% if google_maps_api_key and google_maps_map_id %}
-        <label class="restaurant-search-label">
-          Add from Google Maps
-          <input
-            data-restaurant-place-search
-            placeholder="Search restaurants"
-            autocomplete="off"
-          >
-        </label>
-      {% else %}
+      {% if not google_maps_api_key or not google_maps_map_id %}
         <div class="config-warning">
           <strong>Google Maps is not configured.</strong>
           <span>Add GOOGLE_MAPS_API_KEY and GOOGLE_MAPS_MAP_ID to enable the map and place search.</span>
@@ -45,6 +39,15 @@
             {% endfor %}
           </select>
         </label>
+        <label>
+          Category
+          <select data-restaurant-category-filter>
+            <option value="">All categories</option>
+            {% for category in categories %}
+              <option value="{{ category.value }}">{{ category.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
       </div>
 
       <div class="restaurant-list" data-restaurant-list>
@@ -53,6 +56,23 @@
     </aside>
 
     <div class="restaurant-map-region">
+      <div class="restaurant-map-actions">
+        {% if google_maps_api_key and google_maps_map_id %}
+          <button type="button" data-show-restaurant-add>Add new</button>
+        {% endif %}
+        <button class="ghost" type="button" data-expand-restaurant-controls hidden>
+          Show search
+        </button>
+      </div>
+      {% if google_maps_api_key and google_maps_map_id %}
+        <div class="restaurant-add-overlay" data-restaurant-add-search hidden>
+          <input
+            data-restaurant-place-search
+            placeholder="Search Google Maps"
+            autocomplete="off"
+          >
+        </div>
+      {% endif %}
       <div class="restaurant-map" data-restaurant-map-canvas></div>
       <section class="restaurant-detail-panel" data-restaurant-detail hidden></section>
     </div>

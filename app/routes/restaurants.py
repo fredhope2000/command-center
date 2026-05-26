@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models.food import Restaurant, RestaurantStatus
+from app.models.food import Restaurant, RestaurantCategory, RestaurantStatus
 from app.routes.pages import templates
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
@@ -45,6 +45,10 @@ def _restaurant_payload(restaurant: Restaurant) -> dict[str, Any]:
         "phone_number": restaurant.phone_number,
         "status": restaurant.status.value,
         "status_label": _status_label(restaurant.status.value),
+        "category": restaurant.category.value if restaurant.category else None,
+        "category_label": _category_label(restaurant.category.value)
+        if restaurant.category
+        else None,
         "cuisine": restaurant.cuisine,
         "tags": restaurant.tags,
         "neighborhood": restaurant.neighborhood,
@@ -65,12 +69,28 @@ def _status_options() -> list[dict[str, str]]:
     ]
 
 
+def _category_options() -> list[dict[str, str]]:
+    return [
+        {"value": category.value, "label": _category_label(category.value)}
+        for category in RestaurantCategory
+    ]
+
+
 def _status_label(status: str) -> str:
     return {
         RestaurantStatus.WANT_TO_TRY.value: "Want To Try",
         RestaurantStatus.VISITED.value: "Visited",
         RestaurantStatus.PERMANENTLY_CLOSED.value: "Permanently Closed",
     }.get(status, status.replace("_", " ").title())
+
+
+def _category_label(category: str) -> str:
+    return {
+        RestaurantCategory.PARTY_OF_ONE.value: "Party of One",
+        RestaurantCategory.DATE_NIGHT.value: "Date Night",
+        RestaurantCategory.CASUAL_DATES.value: "Casual Dates",
+        RestaurantCategory.DESSERT.value: "Dessert",
+    }.get(category, category.replace("_", " ").title())
 
 
 @router.get("/")
@@ -85,6 +105,7 @@ def restaurant_map(request: Request, db: Session = Depends(get_db)):
             "google_maps_map_id": settings.google_maps_map_id,
             "restaurants": restaurants,
             "statuses": _status_options(),
+            "categories": _category_options(),
         },
     )
 
@@ -95,6 +116,7 @@ def restaurant_data(db: Session = Depends(get_db)):
     return {
         "restaurants": [_restaurant_payload(restaurant) for restaurant in restaurants],
         "statuses": _status_options(),
+        "categories": _category_options(),
     }
 
 
@@ -128,6 +150,9 @@ async def create_restaurant(request: Request, db: Session = Depends(get_db)):
         website_uri=_clean(payload.get("website_uri")),
         phone_number=_clean(payload.get("phone_number")),
         status=RestaurantStatus(_clean(payload.get("status")) or "want_to_try"),
+        category=RestaurantCategory(_clean(payload.get("category")))
+        if _clean(payload.get("category"))
+        else None,
         cuisine=_clean(payload.get("cuisine")),
         tags=_clean(payload.get("tags")),
         neighborhood=_clean(payload.get("neighborhood")),
@@ -146,6 +171,7 @@ def update_restaurant(
     request: Request,
     restaurant_id: int,
     status: RestaurantStatus = Form(RestaurantStatus.WANT_TO_TRY),
+    category: str = Form(""),
     cuisine: str = Form(""),
     tags: str = Form(""),
     neighborhood: str = Form(""),
@@ -161,6 +187,9 @@ def update_restaurant(
         return RedirectResponse("/restaurants/", status_code=303)
 
     restaurant.status = status
+    restaurant.category = (
+        RestaurantCategory(category) if _clean(category) is not None else None
+    )
     restaurant.cuisine = _clean(cuisine)
     restaurant.tags = _clean(tags)
     restaurant.neighborhood = _clean(neighborhood)
@@ -175,9 +204,15 @@ def update_restaurant(
 
 
 @router.post("/{restaurant_id}/delete")
-def delete_restaurant(restaurant_id: int, db: Session = Depends(get_db)):
+def delete_restaurant(
+    request: Request,
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
     restaurant = db.get(Restaurant, restaurant_id)
     if restaurant is not None:
         db.delete(restaurant)
         db.commit()
+    if _wants_json(request):
+        return JSONResponse({"deleted": restaurant_id})
     return RedirectResponse("/restaurants/", status_code=303)

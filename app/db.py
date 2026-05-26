@@ -86,6 +86,8 @@ def _ensure_lightweight_schema_updates() -> None:
         restaurant_columns = {
             row[1] for row in connection.execute(text("PRAGMA table_info(restaurants)"))
         }
+        if restaurant_columns and "category" not in restaurant_columns:
+            connection.execute(text("ALTER TABLE restaurants ADD COLUMN category VARCHAR"))
         if restaurant_columns and "status" in restaurant_columns:
             connection.execute(
                 text("UPDATE restaurants SET status = 'VISITED' WHERE status = 'LIKED'")

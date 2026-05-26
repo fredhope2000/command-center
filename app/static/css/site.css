@@ -1020,6 +1020,11 @@ td form {
   gap: 18px;
   grid-template-columns: 360px minmax(0, 1fr);
   min-height: calc(100vh - 172px);
+  transition: grid-template-columns 0.18s ease;
+}
+
+.restaurant-map-shell.is-controls-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .restaurant-control-panel,
@@ -1038,9 +1043,18 @@ td form {
   gap: 16px;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   overflow: hidden;
+  transition: opacity 0.12s ease, transform 0.18s ease;
 }
 
-.restaurant-search-label,
+.restaurant-map-shell.is-controls-collapsed .restaurant-control-panel {
+  border: 0;
+  opacity: 0;
+  padding-left: 0;
+  padding-right: 0;
+  pointer-events: none;
+  transform: translateX(-18px);
+}
+
 .restaurant-filters {
   border-top: 1px solid var(--line);
   padding-top: 14px;
@@ -1082,10 +1096,54 @@ td form {
   overflow-wrap: anywhere;
 }
 
+.restaurant-list-pills {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .restaurant-map-region {
   min-height: 560px;
   min-width: 0;
   position: relative;
+}
+
+.restaurant-map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  left: 14px;
+  position: absolute;
+  top: 14px;
+  z-index: 2;
+}
+
+.restaurant-map-actions button {
+  box-shadow: 0 6px 18px rgba(15, 39, 66, 0.18);
+}
+
+.restaurant-map-actions button.ghost {
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.restaurant-map-actions button.ghost:hover {
+  background: #f3f5f2;
+}
+
+.restaurant-map-actions button[hidden] {
+  display: none;
+}
+
+.restaurant-add-overlay {
+  left: 14px;
+  position: absolute;
+  right: 14px;
+  top: 62px;
+  width: min(420px, calc(100% - 28px));
+  z-index: 2;
 }
 
 .restaurant-map {
@@ -1312,6 +1370,14 @@ td form {
 
   .restaurant-control-panel {
     max-height: none;
+  }
+
+  .restaurant-map-shell.is-controls-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .restaurant-map-shell.is-controls-collapsed .restaurant-control-panel {
+    display: none;
   }
 
   .restaurant-map-region,
