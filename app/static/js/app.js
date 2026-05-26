@@ -160,36 +160,37 @@ function createLineItemRow(values = {}, options = {}) {
   const row = document.createElement("div");
   row.className = options.rowClass || "line-item-builder-row";
   const fieldsClass = options.fieldsClass || "";
+  const fieldsMarkup = `
+    <label>
+      Name
+      <input name="${prefix}_name" required placeholder="${options.namePlaceholder || "Greek yogurt"}">
+    </label>
+    <label>
+      Qty
+      <input name="${prefix}_quantity" inputmode="decimal" placeholder="${options.quantityPlaceholder || "2"}">
+    </label>
+    <label>
+      Unit
+      <input name="${prefix}_unit" placeholder="${options.unitPlaceholder || "cups"}">
+    </label>
+    ${
+      includePrice
+        ? `<label>
+            Price
+            <input name="${prefix}_price" inputmode="decimal" placeholder="5.99">
+          </label>`
+        : ""
+    }
+    <label>
+      Notes
+      <input name="${prefix}_notes" placeholder="${options.notesPlaceholder || "Brand, sale, substitute"}">
+    </label>
+    <button class="ghost js-remove-line-item" type="button">Remove</button>
+  `;
   row.innerHTML = `
     <input type="hidden" name="${prefix}_id" value="">
     <input type="hidden" name="${prefix}_delete" value="false">
-    <div class="${fieldsClass}">
-      <label>
-        Name
-        <input name="${prefix}_name" required placeholder="${options.namePlaceholder || "Greek yogurt"}">
-      </label>
-      <label>
-        Qty
-        <input name="${prefix}_quantity" inputmode="decimal" placeholder="${options.quantityPlaceholder || "2"}">
-      </label>
-      <label>
-        Unit
-        <input name="${prefix}_unit" placeholder="${options.unitPlaceholder || "cups"}">
-      </label>
-      ${
-        includePrice
-          ? `<label>
-              Price
-              <input name="${prefix}_price" inputmode="decimal" placeholder="5.99">
-            </label>`
-          : ""
-      }
-      <label>
-        Notes
-        <input name="${prefix}_notes" placeholder="${options.notesPlaceholder || "Brand, sale, substitute"}">
-      </label>
-      <button class="ghost js-remove-line-item" type="button">Remove</button>
-    </div>
+    ${fieldsClass ? `<div class="${fieldsClass}">${fieldsMarkup}</div>` : fieldsMarkup}
   `;
   row.querySelector(".js-remove-line-item").addEventListener("click", () => {
     const form = row.closest("form");
@@ -389,7 +390,477 @@ function wireReceiptUploads() {
   });
 }
 
+const restaurantState = {
+  map: null,
+  googleReady: false,
+  restaurants: [],
+  markers: new Map(),
+  selectedId: null,
+};
+
+function restaurantStatusLabel(status) {
+  return (
+    {
+      want_to_try: "Want To Try",
+      visited: "Visited",
+      permanently_closed: "Permanently Closed",
+    }[status] || ""
+  );
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function restaurantMarkerColor(status) {
+  return {
+    want_to_try: "#2563eb",
+    visited: "#286f52",
+    permanently_closed: "#7c8794",
+  }[status] || "#286f52";
+}
+
+function restaurantSearchText(restaurant) {
+  return [
+    restaurant.name,
+    restaurant.formatted_address,
+    restaurant.cuisine,
+    restaurant.tags,
+    restaurant.neighborhood,
+    restaurant.notes,
+    restaurant.status_label,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function filteredRestaurants(shell) {
+  const textFilter = shell
+    .querySelector("[data-restaurant-text-filter]")
+    ?.value.trim()
+    .toLowerCase();
+  const statusFilter = shell.querySelector("[data-restaurant-status-filter]")?.value;
+
+  return restaurantState.restaurants.filter((restaurant) => {
+    const statusMatches = !statusFilter || restaurant.status === statusFilter;
+    const textMatches =
+      !textFilter || restaurantSearchText(restaurant).includes(textFilter);
+    return statusMatches && textMatches;
+  });
+}
+
+function closeRestaurantDetail() {
+  const panel = document.querySelector("[data-restaurant-detail]");
+  if (panel) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+  }
+  restaurantState.selectedId = null;
+}
+
+function updateRestaurantSavedCount(shell) {
+  const count = shell.querySelector("[data-restaurant-saved-count]");
+  if (!count) {
+    return;
+  }
+  const total = restaurantState.restaurants.length;
+  count.textContent = `${total} saved`;
+}
+
+function selectRestaurant(restaurantId) {
+  restaurantState.selectedId = restaurantId;
+  const restaurant = restaurantState.restaurants.find(
+    (item) => item.id === restaurantId,
+  );
+  const panel = document.querySelector("[data-restaurant-detail]");
+  if (!panel || !restaurant) {
+    return;
+  }
+
+  panel.hidden = false;
+  panel.innerHTML = `
+    <div class="restaurant-detail-heading">
+      <div>
+        <h2>${escapeHtml(restaurant.name)}</h2>
+        ${
+          restaurant.formatted_address
+            ? `<small>${escapeHtml(restaurant.formatted_address)}</small>`
+            : ""
+        }
+      </div>
+      <button class="ghost" type="button" data-close-restaurant-detail>Close</button>
+    </div>
+    <form id="restaurant-detail-form-${restaurant.id}" class="restaurant-detail-form" action="/restaurants/${restaurant.id}" method="post">
+      <div class="restaurant-detail-links">
+        ${
+          restaurant.google_maps_uri
+            ? `<a href="${escapeHtml(restaurant.google_maps_uri)}" target="_blank" rel="noreferrer">Google Maps</a>`
+            : ""
+        }
+        ${
+          restaurant.website_uri
+            ? `<a href="${escapeHtml(restaurant.website_uri)}" target="_blank" rel="noreferrer">Website</a>`
+            : ""
+        }
+        ${
+          restaurant.phone_number
+            ? `<span>${escapeHtml(restaurant.phone_number)}</span>`
+            : ""
+        }
+      </div>
+      <div class="form-row">
+        <label>
+          Status
+          <select name="status">
+            ${["want_to_try", "visited", "permanently_closed"]
+              .map(
+                (status) =>
+                  `<option value="${status}" ${
+                    restaurant.status === status ? "selected" : ""
+                  }>${restaurantStatusLabel(status)}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+        <label>
+          Rating
+          <select name="personal_rating">
+            <option value="">Unrated</option>
+            ${[1, 2, 3, 4, 5]
+              .map(
+                (rating) =>
+                  `<option value="${rating}" ${
+                    restaurant.personal_rating === rating ? "selected" : ""
+                  }>${rating}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>
+          Cuisine
+          <input name="cuisine" value="${escapeHtml(restaurant.cuisine)}" placeholder="Thai, pizza, sushi">
+        </label>
+        <label>
+          Neighborhood
+          <input name="neighborhood" value="${escapeHtml(restaurant.neighborhood)}" placeholder="Mission, Oakland, nearby">
+        </label>
+      </div>
+      <div class="form-row">
+        <label>
+          Tags
+          <input name="tags" value="${escapeHtml(restaurant.tags)}" placeholder="date night, patio, kid-friendly">
+        </label>
+        <label>
+          Price
+          <input name="price_level" value="${escapeHtml(restaurant.price_level)}" placeholder="$, $$, $$$">
+        </label>
+      </div>
+      <label>
+        Notes
+        <textarea name="notes" rows="5" placeholder="What to order, who recommended it, visit notes">${escapeHtml(restaurant.notes)}</textarea>
+      </label>
+    </form>
+    <div class="restaurant-detail-actions">
+      <button form="restaurant-detail-form-${restaurant.id}" type="submit">Save</button>
+      <form class="restaurant-delete-form js-confirm-delete" action="/restaurants/${restaurant.id}/delete" method="post">
+      <button class="ghost" type="submit">Delete</button>
+      </form>
+    </div>
+  `;
+
+  panel
+    .querySelector("[data-close-restaurant-detail]")
+    ?.addEventListener("click", closeRestaurantDetail);
+  panel
+    .querySelector(".restaurant-detail-form")
+    ?.addEventListener("submit", saveRestaurantDetailForm);
+  wireConfirmDeleteForms();
+}
+
+async function saveRestaurantDetailForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+
+  try {
+    const response = await fetch(form.action, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body: new FormData(form),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not save restaurant.");
+    }
+
+    const index = restaurantState.restaurants.findIndex(
+      (restaurant) => restaurant.id === payload.id,
+    );
+    if (index >= 0) {
+      restaurantState.restaurants[index] = payload;
+    }
+    renderRestaurants({ fitMap: false });
+    closeRestaurantDetail();
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
+}
+
+function renderRestaurantList(shell, restaurants) {
+  const list = shell.querySelector("[data-restaurant-list]");
+  if (!list) {
+    return;
+  }
+
+  list.innerHTML = "";
+  if (!restaurants.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No restaurants match the current filters.";
+    list.append(empty);
+    return;
+  }
+
+  restaurants.forEach((restaurant) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "restaurant-list-item";
+    button.dataset.restaurantId = restaurant.id;
+    button.innerHTML = `
+      <span>
+        <strong>${escapeHtml(restaurant.name)}</strong>
+        ${
+          restaurant.neighborhood || restaurant.formatted_address
+            ? `<small>${escapeHtml(restaurant.neighborhood || restaurant.formatted_address)}</small>`
+            : ""
+        }
+      </span>
+      <span class="pill">${escapeHtml(restaurant.status_label)}</span>
+    `;
+    button.addEventListener("click", () => {
+      selectRestaurant(restaurant.id);
+      const marker = restaurantState.markers.get(restaurant.id);
+      if (restaurantState.map) {
+        restaurantState.map.panTo({
+          lat: restaurant.latitude,
+          lng: restaurant.longitude,
+        });
+        restaurantState.map.setZoom(Math.max(restaurantState.map.getZoom() || 12, 14));
+      }
+      marker?.element?.classList.add("restaurant-marker-selected");
+    });
+    list.append(button);
+  });
+}
+
+function renderRestaurantMarkers(shell, restaurants, options = {}) {
+  if (!restaurantState.map || !window.google?.maps?.marker) {
+    return;
+  }
+
+  restaurantState.markers.forEach((marker) => {
+    marker.map = null;
+  });
+  restaurantState.markers.clear();
+
+  const bounds = new google.maps.LatLngBounds();
+  restaurants.forEach((restaurant) => {
+    const markerElement = document.createElement("button");
+    markerElement.type = "button";
+    markerElement.className = "restaurant-marker";
+    markerElement.style.setProperty(
+      "--restaurant-marker-color",
+      restaurantMarkerColor(restaurant.status),
+    );
+    markerElement.textContent = restaurant.name.charAt(0).toUpperCase();
+
+    const marker = new google.maps.marker.AdvancedMarkerElement({
+      map: restaurantState.map,
+      position: { lat: restaurant.latitude, lng: restaurant.longitude },
+      title: restaurant.name,
+      content: markerElement,
+    });
+    marker.addListener("click", () => selectRestaurant(restaurant.id));
+    restaurantState.markers.set(restaurant.id, marker);
+    bounds.extend({ lat: restaurant.latitude, lng: restaurant.longitude });
+  });
+
+  if (options.fitMap === false) {
+    return;
+  }
+  if (restaurants.length > 1) {
+    restaurantState.map.fitBounds(bounds, 56);
+  } else if (restaurants.length === 1) {
+    restaurantState.map.setCenter(bounds.getCenter());
+    restaurantState.map.setZoom(14);
+  }
+}
+
+function renderRestaurants(options = {}) {
+  const shell = document.querySelector("[data-restaurant-map]");
+  if (!shell) {
+    return;
+  }
+  const restaurants = filteredRestaurants(shell);
+  updateRestaurantSavedCount(shell);
+  renderRestaurantList(shell, restaurants);
+  renderRestaurantMarkers(shell, restaurants, options);
+}
+
+function priceLevelLabel(priceLevel) {
+  const value = Number(priceLevel);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+  return "$".repeat(Math.min(value, 4));
+}
+
+async function saveGoogleRestaurant(place) {
+  const location = place.geometry?.location;
+  const response = await fetch("/restaurants/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      google_place_id: place.place_id,
+      name: place.name,
+      formatted_address: place.formatted_address,
+      latitude: location.lat(),
+      longitude: location.lng(),
+      google_maps_uri: place.url,
+      website_uri: place.website,
+      phone_number: place.international_phone_number || place.formatted_phone_number,
+      price_level: priceLevelLabel(place.price_level),
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || "Could not save restaurant.");
+  }
+  return payload;
+}
+
+function wireRestaurantAutocomplete(shell) {
+  const input = shell.querySelector("[data-restaurant-place-search]");
+  if (!input || !window.google?.maps?.places) {
+    return;
+  }
+
+  const autocomplete = new google.maps.places.Autocomplete(input, {
+    fields: [
+      "formatted_address",
+      "formatted_phone_number",
+      "geometry",
+      "international_phone_number",
+      "name",
+      "place_id",
+      "price_level",
+      "url",
+      "website",
+    ],
+    types: ["restaurant"],
+  });
+
+  autocomplete.addListener("place_changed", async () => {
+    const place = autocomplete.getPlace();
+    if (!place.place_id || !place.geometry?.location) {
+      return;
+    }
+    input.disabled = true;
+    try {
+      const restaurant = await saveGoogleRestaurant(place);
+      await loadRestaurants();
+      input.value = "";
+      selectRestaurant(restaurant.id);
+      if (restaurantState.map) {
+        restaurantState.map.panTo({
+          lat: restaurant.latitude,
+          lng: restaurant.longitude,
+        });
+        restaurantState.map.setZoom(14);
+      }
+    } finally {
+      input.disabled = false;
+    }
+  });
+}
+
+async function loadRestaurants() {
+  const response = await fetch("/restaurants/data");
+  const payload = await response.json();
+  restaurantState.restaurants = payload.restaurants || [];
+  renderRestaurants();
+}
+
+function initRestaurantMapWhenReady() {
+  const shell = document.querySelector("[data-restaurant-map]");
+  if (!shell || shell.dataset.hasGoogleConfig !== "true" || !restaurantState.googleReady) {
+    return;
+  }
+  const canvas = shell.querySelector("[data-restaurant-map-canvas]");
+  if (!canvas || restaurantState.map) {
+    return;
+  }
+
+  restaurantState.map = new google.maps.Map(canvas, {
+    center: { lat: 37.7749, lng: -122.4194 },
+    zoom: 11,
+    mapId: shell.dataset.mapId,
+    tilt: 0,
+    heading: 0,
+    gestureHandling: "greedy",
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: true,
+  });
+
+  restaurantState.map.addListener("click", closeRestaurantDetail);
+  wireRestaurantAutocomplete(shell);
+  renderRestaurants();
+}
+
+function wireRestaurantMap() {
+  const shell = document.querySelector("[data-restaurant-map]");
+  if (!shell) {
+    return;
+  }
+
+  shell.querySelectorAll("[data-restaurant-text-filter], [data-restaurant-status-filter]").forEach((element) => {
+    element.addEventListener("input", renderRestaurants);
+    element.addEventListener("change", renderRestaurants);
+  });
+
+  loadRestaurants();
+  initRestaurantMapWhenReady();
+}
+
+window.initRestaurantGoogle = () => {
+  window.restaurantGoogleReady = true;
+  restaurantState.googleReady = true;
+  initRestaurantMapWhenReady();
+};
+
+document.addEventListener("restaurant-google-ready", () => {
+  restaurantState.googleReady = true;
+  initRestaurantMapWhenReady();
+});
+
 document.addEventListener("DOMContentLoaded", () => {
+  if (window.restaurantGoogleReady) {
+    restaurantState.googleReady = true;
+  }
   wireDirtyForms();
   wireConfirmDeleteForms();
   wireEditSections();
@@ -397,4 +868,5 @@ document.addEventListener("DOMContentLoaded", () => {
   wireLineItemBuilders();
   wireClearableForms();
   wireReceiptUploads();
+  wireRestaurantMap();
 });

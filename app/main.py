@@ -12,6 +12,7 @@ from app.routes.food import router as food_router
 from app.routes.groceries import router as groceries_router
 from app.routes.pages import router as pages_router, templates
 from app.routes.recipes import router as recipes_router
+from app.routes.restaurants import router as restaurants_router
 
 STATIC_ROOT = Path("app/static")
 
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(food_router)
     app.include_router(groceries_router)
     app.include_router(recipes_router)
+    app.include_router(restaurants_router)
     return app
 
 

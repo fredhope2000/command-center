@@ -11,6 +11,8 @@ import pytest
 @pytest.fixture()
 def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'test.sqlite'}")
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_MAPS_MAP_ID", raising=False)
     for name in list(sys.modules):
         if name == "app" or name.startswith("app."):
             sys.modules.pop(name)
@@ -445,6 +447,102 @@ def test_recipe_suggestions_render(client: TestClient) -> None:
     assert "Recipe Suggestions" in response.text
     assert "Rice bowl" in response.text
     assert "Rice" in response.text
+
+
+def test_restaurant_map_renders_without_google_config(client: TestClient) -> None:
+    response = client.get("/restaurants/")
+
+    assert response.status_code == 200
+    assert "Restaurants" in response.text
+    assert "Google Maps is not configured" in response.text
+
+
+def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
+    create_response = client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "test-place-1",
+            "name": "Test Bistro",
+            "formatted_address": "123 Test St",
+            "latitude": 37.77,
+            "longitude": -122.42,
+            "google_maps_uri": "https://maps.google.com/?cid=test",
+            "website_uri": "https://example.test",
+            "phone_number": "+1 555-0100",
+        },
+    )
+
+    assert create_response.status_code == 201
+
+    duplicate_response = client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "test-place-1",
+            "name": "Duplicate Bistro",
+            "latitude": 37.78,
+            "longitude": -122.43,
+        },
+    )
+    assert duplicate_response.status_code == 200
+    assert duplicate_response.json()["name"] == "Test Bistro"
+
+    update_response = client.post(
+        "/restaurants/1",
+        data={
+            "status": "visited",
+            "cuisine": "Italian",
+            "tags": "date night, pasta",
+            "neighborhood": "Mission",
+            "personal_rating": "5",
+            "price_level": "$$",
+            "notes": "Order the rigatoni.",
+        },
+        follow_redirects=False,
+    )
+    assert update_response.status_code == 303
+
+    data_response = client.get("/restaurants/data")
+    assert data_response.status_code == 200
+    restaurant = data_response.json()["restaurants"][0]
+    assert restaurant["name"] == "Test Bistro"
+    assert restaurant["status"] == "visited"
+    assert restaurant["status_label"] == "Visited"
+    assert restaurant["personal_rating"] == 5
+    assert restaurant["notes"] == "Order the rigatoni."
+
+
+def test_restaurant_legacy_statuses_are_migrated_to_visited(
+    client: TestClient,
+) -> None:
+    from sqlalchemy import text
+
+    from app.db import engine, init_db
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO restaurants "
+                "(google_place_id, name, latitude, longitude, status, created_at, updated_at) "
+                "VALUES "
+                "('legacy-liked', 'Legacy Liked', 37.77, -122.42, 'LIKED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), "
+                "('legacy-didnt-like', 'Legacy Didnt Like', 37.78, -122.43, 'DIDNT_LIKE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), "
+                "('legacy-favorite', 'Legacy Favorite', 37.78, -122.43, 'FAVORITE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), "
+                "('legacy-skip', 'Legacy Skip', 37.79, -122.44, 'SKIP', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+        )
+
+    init_db()
+
+    response = client.get("/restaurants/data")
+    assert response.status_code == 200
+    statuses = {
+        restaurant["name"]: restaurant["status"]
+        for restaurant in response.json()["restaurants"]
+    }
+    assert statuses["Legacy Liked"] == "visited"
+    assert statuses["Legacy Didnt Like"] == "visited"
+    assert statuses["Legacy Favorite"] == "visited"
+    assert statuses["Legacy Skip"] == "visited"
 
 
 def test_structured_recipe_ingredients_reduce_inventory(client: TestClient) -> None:

@@ -82,3 +82,29 @@ def _ensure_lightweight_schema_updates() -> None:
                     "ADD COLUMN added_to_inventory_at DATETIME"
                 )
             )
+
+        restaurant_columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(restaurants)"))
+        }
+        if restaurant_columns and "status" in restaurant_columns:
+            connection.execute(
+                text("UPDATE restaurants SET status = 'VISITED' WHERE status = 'LIKED'")
+            )
+            connection.execute(
+                text(
+                    "UPDATE restaurants SET status = 'VISITED' "
+                    "WHERE status = 'DIDNT_LIKE'"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE restaurants SET status = 'VISITED' "
+                    "WHERE status = 'FAVORITE'"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE restaurants SET status = 'VISITED' "
+                    "WHERE status = 'SKIP'"
+                )
+            )

@@ -1015,6 +1015,189 @@ td form {
   text-decoration: line-through;
 }
 
+.restaurant-map-shell {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 360px minmax(0, 1fr);
+  min-height: calc(100vh - 172px);
+}
+
+.restaurant-control-panel,
+.restaurant-detail-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+  padding: 16px;
+}
+
+.restaurant-control-panel {
+  align-self: stretch;
+  display: grid;
+  gap: 16px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.restaurant-search-label,
+.restaurant-filters {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.restaurant-filters {
+  display: grid;
+  gap: 12px;
+}
+
+.restaurant-list {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 12px;
+}
+
+.restaurant-list-item {
+  align-items: center;
+  background: #f8faf7;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-content: stretch;
+  padding: 11px;
+  text-align: left;
+}
+
+.restaurant-list-item:hover {
+  background: #eef3ef;
+}
+
+.restaurant-list-item strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.restaurant-map-region {
+  min-height: 560px;
+  min-width: 0;
+  position: relative;
+}
+
+.restaurant-map {
+  background: #dfe7de;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  height: 100%;
+  min-height: 560px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.restaurant-map-shell[data-has-google-config="false"] .restaurant-map::before {
+  align-items: center;
+  color: var(--muted);
+  content: "Map unavailable until Google Maps env vars are configured.";
+  display: flex;
+  font-weight: 700;
+  height: 100%;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.restaurant-detail-panel {
+  bottom: 18px;
+  max-height: calc(100% - 36px);
+  overflow: auto;
+  position: absolute;
+  right: 18px;
+  width: min(420px, calc(100% - 36px));
+  z-index: 1;
+}
+
+.restaurant-detail-heading {
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+}
+
+.restaurant-detail-links {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  gap: 10px;
+}
+
+.restaurant-detail-links a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.restaurant-detail-form {
+  display: grid;
+  gap: 12px;
+}
+
+.restaurant-detail-actions {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.restaurant-delete-form {
+  margin: 0;
+}
+
+.restaurant-marker {
+  align-items: center;
+  background: var(--restaurant-marker-color);
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(15, 39, 66, 0.3);
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+
+.restaurant-marker:hover {
+  background: var(--restaurant-marker-color);
+  transform: translateY(-1px);
+}
+
+.config-warning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  color: #8b5d1f;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.config-warning span {
+  font-size: 0.9rem;
+}
+
 @media (max-width: 1350px) {
   .editable-section.is-editing .inventory-row {
     grid-template-columns: minmax(0, 1fr);
@@ -1073,7 +1256,8 @@ td form {
   .metric-grid,
   .two-column,
   .entry-layout,
-  .roadmap-grid {
+  .roadmap-grid,
+  .restaurant-map-shell {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1124,6 +1308,21 @@ td form {
 
   .inline-delete-form {
     align-self: stretch;
+  }
+
+  .restaurant-control-panel {
+    max-height: none;
+  }
+
+  .restaurant-map-region,
+  .restaurant-map {
+    min-height: 520px;
+  }
+
+  .restaurant-detail-panel {
+    bottom: 12px;
+    right: 12px;
+    width: calc(100% - 24px);
   }
 }
 

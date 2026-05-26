@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block page_title %}Restaurants{% endblock %}
+
+{% block content %}
+  <section
+    class="restaurant-map-shell"
+    data-restaurant-map
+    data-map-id="{{ google_maps_map_id }}"
+    data-has-google-config="{{ 'true' if google_maps_api_key and google_maps_map_id else 'false' }}"
+  >
+    <aside class="restaurant-control-panel">
+      <div class="panel-heading">
+        <h2>Restaurant Census</h2>
+        <span data-restaurant-saved-count>{{ restaurants|length }} saved</span>
+      </div>
+
+      {% if google_maps_api_key and google_maps_map_id %}
+        <label class="restaurant-search-label">
+          Add from Google Maps
+          <input
+            data-restaurant-place-search
+            placeholder="Search restaurants"
+            autocomplete="off"
+          >
+        </label>
+      {% else %}
+        <div class="config-warning">
+          <strong>Google Maps is not configured.</strong>
+          <span>Add GOOGLE_MAPS_API_KEY and GOOGLE_MAPS_MAP_ID to enable the map and place search.</span>
+        </div>
+      {% endif %}
+
+      <div class="restaurant-filters" data-restaurant-filters>
+        <label>
+          Search saved
+          <input data-restaurant-text-filter placeholder="Name, tag, note, neighborhood">
+        </label>
+        <label>
+          Status
+          <select data-restaurant-status-filter>
+            <option value="">All statuses</option>
+            {% for status in statuses %}
+              <option value="{{ status.value }}">{{ status.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <div class="restaurant-list" data-restaurant-list>
+        <p class="empty">No restaurants match the current filters.</p>
+      </div>
+    </aside>
+
+    <div class="restaurant-map-region">
+      <div class="restaurant-map" data-restaurant-map-canvas></div>
+      <section class="restaurant-detail-panel" data-restaurant-detail hidden></section>
+    </div>
+  </section>
+
+  {% if google_maps_api_key and google_maps_map_id %}
+    <script>
+      window.initRestaurantGoogle = window.initRestaurantGoogle || function () {
+        window.restaurantGoogleReady = true;
+        document.dispatchEvent(new Event("restaurant-google-ready"));
+      };
+    </script>
+    <script
+      src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&callback=initRestaurantGoogle&libraries=places,marker&map_ids={{ google_maps_map_id }}&loading=async"
+      async
+      defer
+    ></script>
+  {% endif %}
+{% endblock %}
