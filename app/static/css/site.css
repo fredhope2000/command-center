@@ -1046,6 +1046,10 @@ td form {
   transition: opacity 0.12s ease, transform 0.18s ease;
 }
 
+.restaurant-control-panel .panel-heading {
+  margin-bottom: 0;
+}
+
 .restaurant-map-shell.is-controls-collapsed .restaurant-control-panel {
   border: 0;
   opacity: 0;
