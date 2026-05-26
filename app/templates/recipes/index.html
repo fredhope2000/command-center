@@ -3,7 +3,35 @@
 {% block page_title %}Recipes{% endblock %}
 
 {% block content %}
-  <section class="entry-layout">
+  <section class="grocery-detail-layout">
+    <section class="panel inventory-panel">
+      <div class="panel-heading">
+        <h2>Cookbook</h2>
+        <span>{{ recipes|length }} recipe{{ "" if recipes|length == 1 else "s" }}</span>
+      </div>
+      {% if recipes %}
+        <div class="recipe-grid">
+          {% for recipe in recipes %}
+            <article class="recipe-card">
+              <h3><a href="/recipes/{{ recipe.id }}">{{ recipe.title }}</a></h3>
+              <p>{{ recipe.notes or recipe.source or "No notes yet." }}</p>
+              <div class="card-meta">
+                {% if recipe.cuisine %}<span class="pill">{{ recipe.cuisine }}</span>{% endif %}
+                {% if recipe.tags %}<span>{{ recipe.tags }}</span>{% endif %}
+                {% if recipe.servings %}<span>{{ recipe.servings }} serving{{ "" if recipe.servings == 1 else "s" }}</span>{% endif %}
+                {% if recipe.shelf_life_days is not none %}<span>{{ recipe.shelf_life_days }} day shelf life</span>{% endif %}
+              </div>
+              <form class="make-it-form" action="/recipes/{{ recipe.id }}/make" method="post">
+                <button type="submit">Make it</button>
+              </form>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty">No recipes yet. Add a reliable weeknight meal to start the cookbook.</p>
+      {% endif %}
+    </section>
+
     <form class="panel form-panel" action="/recipes/" method="post">
       <h2>Add Recipe</h2>
       <label>
@@ -75,32 +103,5 @@
       <button type="submit">Add recipe</button>
     </form>
 
-    <section class="panel inventory-panel">
-      <div class="panel-heading">
-        <h2>Cookbook</h2>
-        <span>{{ recipes|length }} recipe{{ "" if recipes|length == 1 else "s" }}</span>
-      </div>
-      {% if recipes %}
-        <div class="recipe-grid">
-          {% for recipe in recipes %}
-            <article class="recipe-card">
-              <h3><a href="/recipes/{{ recipe.id }}">{{ recipe.title }}</a></h3>
-              <p>{{ recipe.notes or recipe.source or "No notes yet." }}</p>
-              <div class="card-meta">
-                {% if recipe.cuisine %}<span class="pill">{{ recipe.cuisine }}</span>{% endif %}
-                {% if recipe.tags %}<span>{{ recipe.tags }}</span>{% endif %}
-                {% if recipe.servings %}<span>{{ recipe.servings }} serving{{ "" if recipe.servings == 1 else "s" }}</span>{% endif %}
-                {% if recipe.shelf_life_days is not none %}<span>{{ recipe.shelf_life_days }} day shelf life</span>{% endif %}
-              </div>
-              <form class="make-it-form" action="/recipes/{{ recipe.id }}/make" method="post">
-                <button type="submit">Make it</button>
-              </form>
-            </article>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="empty">No recipes yet. Add a reliable weeknight meal to start the cookbook.</p>
-      {% endif %}
-    </section>
   </section>
 {% endblock %}
