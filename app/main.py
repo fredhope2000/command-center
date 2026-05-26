@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -39,6 +40,11 @@ def create_app() -> FastAPI:
     templates.env.globals["static_asset"] = static_asset
     templates.env.globals["settings"] = settings
     templates.env.filters["compact_number"] = compact_number
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> RedirectResponse:
+        return RedirectResponse(static_asset("favicon.svg"), status_code=307)
+
     app.include_router(pages_router)
     app.include_router(food_router)
     app.include_router(groceries_router)
