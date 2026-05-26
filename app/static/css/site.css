@@ -1019,7 +1019,8 @@ td form {
   display: grid;
   gap: 18px;
   grid-template-columns: 360px minmax(0, 1fr);
-  min-height: calc(100vh - 184px);
+  height: calc(100vh - 184px);
+  min-height: 520px;
   transition: grid-template-columns 0.18s ease;
 }
 
@@ -1042,6 +1043,7 @@ td form {
   display: grid;
   gap: 16px;
   grid-template-rows: auto auto auto minmax(0, 1fr);
+  min-height: 0;
   overflow: hidden;
   transition: opacity 0.12s ease, transform 0.18s ease;
 }
@@ -1077,12 +1079,13 @@ td form {
 }
 
 .restaurant-list {
-  border-top: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-radius: 8px;
   display: grid;
   gap: 8px;
   min-height: 0;
   overflow: auto;
-  padding-top: 8px;
+  padding: 8px;
 }
 
 .restaurant-list-item {
@@ -1116,7 +1119,7 @@ td form {
 }
 
 .restaurant-map-region {
-  min-height: 560px;
+  min-height: 0;
   min-width: 0;
   position: relative;
 }
@@ -1166,7 +1169,7 @@ td form {
   border: 1px solid var(--line);
   border-radius: 8px;
   height: 100%;
-  min-height: 560px;
+  min-height: 0;
   overflow: hidden;
   width: 100%;
 }
@@ -1332,6 +1335,7 @@ td form {
   .roadmap-grid,
   .restaurant-map-shell {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
     min-height: auto;
   }
 
@@ -1385,7 +1389,7 @@ td form {
   }
 
   .restaurant-control-panel {
-    max-height: none;
+    max-height: 520px;
   }
 
   .restaurant-map-shell.is-controls-collapsed {
