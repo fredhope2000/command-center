@@ -1019,7 +1019,7 @@ td form {
   display: grid;
   gap: 18px;
   grid-template-columns: 360px minmax(0, 1fr);
-  min-height: calc(100vh - 172px);
+  min-height: calc(100vh - 184px);
   transition: grid-template-columns 0.18s ease;
 }
 
@@ -1062,7 +1062,14 @@ td form {
 
 .restaurant-filters {
   display: grid;
-  gap: 12px;
+  gap: 10px;
+}
+
+.restaurant-result-count {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.1;
+  margin: -2px 0 -8px;
 }
 
 .restaurant-list {
@@ -1071,7 +1078,7 @@ td form {
   gap: 8px;
   min-height: 0;
   overflow: auto;
-  padding-top: 12px;
+  padding-top: 8px;
 }
 
 .restaurant-list-item {
@@ -1321,6 +1328,7 @@ td form {
   .roadmap-grid,
   .restaurant-map-shell {
     grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
   }
 
   .form-row {

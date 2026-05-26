@@ -484,13 +484,14 @@ function closeRestaurantDetail() {
   restaurantState.selectedId = null;
 }
 
-function updateRestaurantSavedCount(shell) {
-  const count = shell.querySelector("[data-restaurant-saved-count]");
+function updateRestaurantResultCount(shell, shown) {
+  const count = shell.querySelector("[data-restaurant-result-count]");
   if (!count) {
     return;
   }
   const total = restaurantState.restaurants.length;
-  count.textContent = `${total} saved`;
+  const itemLabel = total === 1 ? "item" : "items";
+  count.textContent = `${shown} of ${total} ${itemLabel} shown`;
 }
 
 function resizeRestaurantMap() {
@@ -831,7 +832,7 @@ function renderRestaurants(options = {}) {
     return;
   }
   const restaurants = filteredRestaurants(shell);
-  updateRestaurantSavedCount(shell);
+  updateRestaurantResultCount(shell, restaurants.length);
   renderRestaurantList(shell, restaurants);
   renderRestaurantMarkers(shell, restaurants, options);
 }

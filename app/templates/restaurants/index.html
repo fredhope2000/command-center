@@ -13,7 +13,6 @@
       <div class="panel-heading">
         <h2>Restaurant Census</h2>
         <div class="panel-actions">
-          <span data-restaurant-saved-count>{{ restaurants|length }} saved</span>
           <button class="ghost" type="button" data-collapse-restaurant-controls>Hide</button>
         </div>
       </div>
@@ -48,6 +47,7 @@
             {% endfor %}
           </select>
         </label>
+        <p class="restaurant-result-count" data-restaurant-result-count>{{ restaurants|length }} of {{ restaurants|length }} {{ 'item' if restaurants|length == 1 else 'items' }} shown</p>
       </div>
 
       <div class="restaurant-list" data-restaurant-list>

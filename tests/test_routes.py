@@ -455,6 +455,8 @@ def test_restaurant_map_renders_without_google_config(client: TestClient) -> Non
     assert response.status_code == 200
     assert "Restaurants" in response.text
     assert "Google Maps is not configured" in response.text
+    assert "0 of 0 items shown" in response.text
+    assert "0 saved" not in response.text
 
 
 def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
