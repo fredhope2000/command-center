@@ -392,6 +392,7 @@ function wireReceiptUploads() {
 
 const restaurantState = {
   map: null,
+  placesService: null,
   googleReady: false,
   restaurants: [],
   markers: new Map(),
@@ -869,6 +870,20 @@ async function saveGoogleRestaurant(place) {
   return payload;
 }
 
+async function showSavedGoogleRestaurant(shell, place) {
+  const restaurant = await saveGoogleRestaurant(place);
+  await loadRestaurants();
+  hideRestaurantAddSearch(shell);
+  selectRestaurant(restaurant.id);
+  if (restaurantState.map) {
+    restaurantState.map.panTo({
+      lat: restaurant.latitude,
+      lng: restaurant.longitude,
+    });
+    restaurantState.map.setZoom(14);
+  }
+}
+
 function wireRestaurantAutocomplete(shell) {
   const input = shell.querySelector("[data-restaurant-place-search]");
   if (!input || !window.google?.maps?.places) {
@@ -887,8 +902,12 @@ function wireRestaurantAutocomplete(shell) {
       "url",
       "website",
     ],
+    strictBounds: false,
     types: ["restaurant"],
   });
+  if (restaurantState.map) {
+    autocomplete.bindTo("bounds", restaurantState.map);
+  }
 
   autocomplete.addListener("place_changed", async () => {
     const place = autocomplete.getPlace();
@@ -897,21 +916,60 @@ function wireRestaurantAutocomplete(shell) {
     }
     input.disabled = true;
     try {
-      const restaurant = await saveGoogleRestaurant(place);
-      await loadRestaurants();
-      hideRestaurantAddSearch(shell);
-      selectRestaurant(restaurant.id);
-      if (restaurantState.map) {
-        restaurantState.map.panTo({
-          lat: restaurant.latitude,
-          lng: restaurant.longitude,
-        });
-        restaurantState.map.setZoom(14);
-      }
+      await showSavedGoogleRestaurant(shell, place);
     } finally {
       input.disabled = false;
     }
   });
+}
+
+function getGooglePlaceDetails(placeId) {
+  return new Promise((resolve, reject) => {
+    if (!restaurantState.placesService) {
+      reject(new Error("Google Places is not ready."));
+      return;
+    }
+    restaurantState.placesService.getDetails(
+      {
+        placeId,
+        fields: [
+          "formatted_address",
+          "formatted_phone_number",
+          "geometry",
+          "international_phone_number",
+          "name",
+          "place_id",
+          "price_level",
+          "url",
+          "website",
+        ],
+      },
+      (place, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+          resolve(place);
+          return;
+        }
+        reject(new Error(`Could not load place details: ${status}`));
+      },
+    );
+  });
+}
+
+async function saveRestaurantFromMapClick(shell, event) {
+  if (!event.placeId) {
+    closeRestaurantDetail();
+    return;
+  }
+  event.stop();
+  try {
+    const place = await getGooglePlaceDetails(event.placeId);
+    if (!place.place_id || !place.geometry?.location) {
+      return;
+    }
+    await showSavedGoogleRestaurant(shell, place);
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 async function loadRestaurants() {
@@ -943,7 +1001,12 @@ function initRestaurantMapWhenReady() {
     fullscreenControl: true,
   });
 
-  restaurantState.map.addListener("click", closeRestaurantDetail);
+  restaurantState.placesService = new google.maps.places.PlacesService(
+    restaurantState.map,
+  );
+  restaurantState.map.addListener("click", (event) => {
+    saveRestaurantFromMapClick(shell, event);
+  });
   wireRestaurantAutocomplete(shell);
   renderRestaurants();
 }
