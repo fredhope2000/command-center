@@ -478,6 +478,9 @@ function closeRestaurantDetail() {
     panel.hidden = true;
     panel.innerHTML = "";
   }
+  document
+    .querySelector("[data-restaurant-map]")
+    ?.classList.remove("has-restaurant-detail");
   restaurantState.selectedId = null;
 }
 
@@ -518,6 +521,27 @@ function showRestaurantAddSearch(shell) {
   window.setTimeout(() => searchInput.focus(), 0);
 }
 
+function hideRestaurantAddSearch(shell) {
+  const searchWrap = shell.querySelector("[data-restaurant-add-search]");
+  const searchInput = shell.querySelector("[data-restaurant-place-search]");
+  if (!searchWrap) {
+    return;
+  }
+  searchWrap.hidden = true;
+  if (searchInput) {
+    searchInput.value = "";
+  }
+}
+
+function restaurantAddSearchIsOpen(shell) {
+  const searchWrap = shell.querySelector("[data-restaurant-add-search]");
+  return Boolean(searchWrap && !searchWrap.hidden);
+}
+
+function isGooglePlacesSuggestionClick(target) {
+  return Boolean(target.closest?.(".pac-container"));
+}
+
 function selectRestaurant(restaurantId) {
   restaurantState.selectedId = restaurantId;
   const restaurant = restaurantState.restaurants.find(
@@ -529,6 +553,7 @@ function selectRestaurant(restaurantId) {
   }
 
   panel.hidden = false;
+  panel.closest("[data-restaurant-map]")?.classList.add("has-restaurant-detail");
   panel.innerHTML = `
     <div class="restaurant-detail-heading">
       <div>
@@ -873,8 +898,7 @@ function wireRestaurantAutocomplete(shell) {
     try {
       const restaurant = await saveGoogleRestaurant(place);
       await loadRestaurants();
-      input.value = "";
-      input.closest("[data-restaurant-add-search]")?.setAttribute("hidden", "");
+      hideRestaurantAddSearch(shell);
       selectRestaurant(restaurant.id);
       if (restaurantState.map) {
         restaurantState.map.panTo({
@@ -935,13 +959,30 @@ function wireRestaurantMap() {
   });
   shell
     .querySelector("[data-show-restaurant-add]")
-    ?.addEventListener("click", () => showRestaurantAddSearch(shell));
+    ?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      showRestaurantAddSearch(shell);
+    });
   shell
     .querySelector("[data-collapse-restaurant-controls]")
     ?.addEventListener("click", () => setRestaurantControlsCollapsed(shell, true));
   shell
     .querySelector("[data-expand-restaurant-controls]")
     ?.addEventListener("click", () => setRestaurantControlsCollapsed(shell, false));
+  const dismissRestaurantAddSearch = (event) => {
+    const searchWrap = shell.querySelector("[data-restaurant-add-search]");
+    if (
+      !restaurantAddSearchIsOpen(shell) ||
+      searchWrap?.contains(event.target) ||
+      event.target.closest?.("[data-show-restaurant-add]") ||
+      isGooglePlacesSuggestionClick(event.target)
+    ) {
+      return;
+    }
+    hideRestaurantAddSearch(shell);
+  };
+  document.addEventListener("pointerdown", dismissRestaurantAddSearch, true);
+  document.addEventListener("click", dismissRestaurantAddSearch, true);
 
   loadRestaurants();
   initRestaurantMapWhenReady();

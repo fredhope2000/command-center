@@ -1137,6 +1137,10 @@ td form {
   display: none;
 }
 
+.restaurant-map-shell.has-restaurant-detail .restaurant-map-actions {
+  display: none;
+}
+
 .restaurant-add-overlay {
   left: 14px;
   position: absolute;
@@ -1389,6 +1393,14 @@ td form {
     bottom: 12px;
     right: 12px;
     width: calc(100% - 24px);
+  }
+
+  .restaurant-map-actions {
+    top: 22px;
+  }
+
+  .restaurant-add-overlay {
+    top: 70px;
   }
 }
 
