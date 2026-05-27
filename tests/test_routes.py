@@ -517,6 +517,36 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
     assert restaurant["personal_rating"] == 5
     assert restaurant["notes"] == "Order the rigatoni."
 
+    custom_name_response = client.post(
+        "/restaurants/1",
+        data={
+            "status": "visited",
+            "category": "casual_dates",
+            "custom_name": "The Rigatoni Place",
+            "personal_rating": "5",
+        },
+        headers={"accept": "application/json"},
+    )
+    assert custom_name_response.status_code == 200
+    assert custom_name_response.json()["name"] == "The Rigatoni Place"
+    assert custom_name_response.json()["google_name"] == "Test Bistro"
+    assert custom_name_response.json()["custom_name"] == "The Rigatoni Place"
+
+    clear_name_response = client.post(
+        "/restaurants/1",
+        data={
+            "status": "visited",
+            "category": "casual_dates",
+            "custom_name": "",
+            "personal_rating": "5",
+        },
+        headers={"accept": "application/json"},
+    )
+    assert clear_name_response.status_code == 200
+    assert clear_name_response.json()["name"] == "Test Bistro"
+    assert clear_name_response.json()["google_name"] == "Test Bistro"
+    assert clear_name_response.json()["custom_name"] is None
+
 
 def test_restaurant_legacy_statuses_are_migrated_to_visited(
     client: TestClient,
@@ -577,6 +607,34 @@ def test_restaurant_category_column_is_added_to_existing_sqlite_table(
     assert response.status_code == 201
     assert response.json()["category"] == "party_of_one"
     assert response.json()["category_label"] == "Party of One"
+
+
+def test_restaurant_custom_name_column_is_added_to_existing_sqlite_table(
+    client: TestClient,
+) -> None:
+    from sqlalchemy import text
+
+    from app.db import engine, init_db
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE restaurants DROP COLUMN custom_name"))
+
+    init_db()
+
+    response = client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "custom-name-place-1",
+            "name": "Maps Cafe",
+            "custom_name": "House Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["name"] == "House Cafe"
+    assert response.json()["google_name"] == "Maps Cafe"
+    assert response.json()["custom_name"] == "House Cafe"
 
 
 def test_structured_recipe_ingredients_reduce_inventory(client: TestClient) -> None:

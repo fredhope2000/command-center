@@ -146,6 +146,7 @@ class Restaurant(Base):
         String(160), nullable=False, unique=True, index=True
     )
     name: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    custom_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     formatted_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     latitude: Mapped[float] = mapped_column(Float, nullable=False)
     longitude: Mapped[float] = mapped_column(Float, nullable=False)

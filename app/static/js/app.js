@@ -440,6 +440,7 @@ function restaurantMarkerColor(status) {
 function restaurantSearchText(restaurant) {
   return [
     restaurant.name,
+    restaurant.google_name,
     restaurant.formatted_address,
     restaurant.cuisine,
     restaurant.tags,
@@ -564,7 +565,13 @@ function selectRestaurant(restaurantId) {
   panel.innerHTML = `
     <div class="restaurant-detail-heading">
       <div>
-        <h2>${escapeHtml(restaurant.name)}</h2>
+        <div class="restaurant-name-heading">
+          <h2 data-restaurant-name-title>${escapeHtml(restaurant.name)}</h2>
+          <input class="restaurant-name-input" name="custom_name" form="restaurant-detail-form-${restaurant.id}" value="${escapeHtml(restaurant.custom_name)}" placeholder="${escapeHtml(restaurant.google_name || restaurant.name)}" aria-label="Custom restaurant name" data-restaurant-name-input hidden>
+          <button class="restaurant-name-edit-button" type="button" title="Edit custom name" aria-label="Edit custom name" data-edit-restaurant-name>
+            <span aria-hidden="true">✎</span>
+          </button>
+        </div>
         ${
           restaurant.formatted_address
             ? `<small>${escapeHtml(restaurant.formatted_address)}</small>`
@@ -670,6 +677,19 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector("[data-close-restaurant-detail]")
     ?.addEventListener("click", closeRestaurantDetail);
+  panel
+    .querySelector("[data-edit-restaurant-name]")
+    ?.addEventListener("click", () => {
+      const title = panel.querySelector("[data-restaurant-name-title]");
+      const input = panel.querySelector("[data-restaurant-name-input]");
+      if (!title || !input) {
+        return;
+      }
+      title.hidden = true;
+      input.hidden = false;
+      input.focus();
+      input.select();
+    });
   panel
     .querySelector(".restaurant-detail-form")
     ?.addEventListener("submit", saveRestaurantDetailForm);

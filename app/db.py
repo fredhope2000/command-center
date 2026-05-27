@@ -88,6 +88,10 @@ def _ensure_lightweight_schema_updates() -> None:
         }
         if restaurant_columns and "category" not in restaurant_columns:
             connection.execute(text("ALTER TABLE restaurants ADD COLUMN category VARCHAR"))
+        if restaurant_columns and "custom_name" not in restaurant_columns:
+            connection.execute(
+                text("ALTER TABLE restaurants ADD COLUMN custom_name VARCHAR")
+            )
         if restaurant_columns and "status" in restaurant_columns:
             connection.execute(
                 text("UPDATE restaurants SET status = 'VISITED' WHERE status = 'LIKED'")

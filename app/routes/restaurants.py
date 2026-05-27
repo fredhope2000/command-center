@@ -33,10 +33,13 @@ def _parse_rating(value: Any) -> int | None:
 
 
 def _restaurant_payload(restaurant: Restaurant) -> dict[str, Any]:
+    display_name = restaurant.custom_name or restaurant.name
     return {
         "id": restaurant.id,
         "google_place_id": restaurant.google_place_id,
-        "name": restaurant.name,
+        "name": display_name,
+        "google_name": restaurant.name,
+        "custom_name": restaurant.custom_name,
         "formatted_address": restaurant.formatted_address,
         "latitude": restaurant.latitude,
         "longitude": restaurant.longitude,
@@ -149,6 +152,7 @@ async def create_restaurant(request: Request, db: Session = Depends(get_db)):
         google_maps_uri=_clean(payload.get("google_maps_uri")),
         website_uri=_clean(payload.get("website_uri")),
         phone_number=_clean(payload.get("phone_number")),
+        custom_name=_clean(payload.get("custom_name")),
         status=RestaurantStatus(_clean(payload.get("status")) or "want_to_try"),
         category=RestaurantCategory(_clean(payload.get("category")))
         if _clean(payload.get("category"))
@@ -175,6 +179,7 @@ def update_restaurant(
     cuisine: str = Form(""),
     tags: str = Form(""),
     neighborhood: str = Form(""),
+    custom_name: str = Form(""),
     personal_rating: str = Form(""),
     price_level: str = Form(""),
     notes: str = Form(""),
@@ -193,6 +198,7 @@ def update_restaurant(
     restaurant.cuisine = _clean(cuisine)
     restaurant.tags = _clean(tags)
     restaurant.neighborhood = _clean(neighborhood)
+    restaurant.custom_name = _clean(custom_name)
     restaurant.personal_rating = _parse_rating(personal_rating)
     restaurant.price_level = _clean(price_level)
     restaurant.notes = _clean(notes)
