@@ -11,18 +11,25 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar">
-        <a class="brand" href="/">
-          <span class="brand-mark">CC</span>
-          <span>
-            <strong>Command Center</strong>
-            <small>
-              Household ops
-              {% if not settings.is_production %}
-                <span class="env-badge">{{ settings.app_env }}</span>
-              {% endif %}
-            </small>
-          </span>
-        </a>
+        <div class="sidebar-head">
+          <a class="brand" href="/">
+            <span class="brand-mark">CC</span>
+            <span>
+              <strong>Command Center</strong>
+              <small>
+                Household ops
+                {% if not settings.is_production %}
+                  <span class="env-badge">{{ settings.app_env }}</span>
+                {% endif %}
+              </small>
+            </span>
+          </a>
+          {% if settings.auth_enabled %}
+            <form class="logout-form" method="post" action="/logout">
+              <button class="button ghost" type="submit">Sign out</button>
+            </form>
+          {% endif %}
+        </div>
         <nav class="nav">
           <a class="{{ 'active' if active_nav == 'dashboard' else '' }}" href="/">Dashboard</a>
           <a class="{{ 'active' if active_nav == 'food' else '' }}" href="/food/">Food Inventory</a>
@@ -44,11 +51,6 @@
             <p class="eyebrow">Private household dashboard</p>
             <h1>{% block page_title %}Command Center{% endblock %}</h1>
           </div>
-          {% if settings.auth_enabled %}
-            <form class="logout-form" method="post" action="/logout">
-              <button class="button ghost" type="submit">Sign out</button>
-            </form>
-          {% endif %}
         </header>
 
         <main class="content">

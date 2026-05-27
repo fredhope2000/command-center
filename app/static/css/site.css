@@ -40,12 +40,20 @@ a {
   padding: 24px 18px;
 }
 
+.sidebar-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
 .brand {
   display: flex;
   gap: 12px;
   align-items: center;
   text-decoration: none;
-  margin-bottom: 28px;
+  min-width: 0;
 }
 
 .brand-mark {
@@ -211,7 +219,14 @@ button.ghost:hover {
 }
 
 .logout-form button {
+  border-color: rgba(219, 234, 254, 0.28);
+  color: #dbeafe;
   white-space: nowrap;
+}
+
+.logout-form button:hover {
+  background: rgba(255, 255, 255, 0.11);
+  color: #ffffff;
 }
 
 .login-page {
@@ -1502,7 +1517,6 @@ td form {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
-    position: sticky;
   }
 
   .content {
@@ -1525,9 +1539,6 @@ td form {
   }
 
   .logout-form {
-    position: absolute;
-    right: 12px;
-    top: 16px;
     width: auto;
   }
 
