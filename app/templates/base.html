@@ -44,6 +44,11 @@
             <p class="eyebrow">Private household dashboard</p>
             <h1>{% block page_title %}Command Center{% endblock %}</h1>
           </div>
+          {% if settings.auth_enabled %}
+            <form class="logout-form" method="post" action="/logout">
+              <button class="button ghost" type="submit">Sign out</button>
+            </form>
+          {% endif %}
         </header>
 
         <main class="content">

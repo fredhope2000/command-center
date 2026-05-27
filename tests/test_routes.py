@@ -4,22 +4,88 @@ import importlib
 import sys
 from collections.abc import Iterator
 
+import bcrypt
 from fastapi.testclient import TestClient
 import pytest
+
+
+def _reload_app() -> object:
+    for name in list(sys.modules):
+        if name == "app" or name.startswith("app."):
+            sys.modules.pop(name)
+    return importlib.import_module("app.main")
 
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'test.sqlite'}")
+    monkeypatch.setenv("COMMAND_CENTER_AUTH_ENABLED", "false")
     monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_MAPS_MAP_ID", raising=False)
-    for name in list(sys.modules):
-        if name == "app" or name.startswith("app."):
-            sys.modules.pop(name)
 
-    main = importlib.import_module("app.main")
+    main = _reload_app()
     with TestClient(main.app) as test_client:
         yield test_client
+
+
+@pytest.fixture()
+def auth_client(tmp_path, monkeypatch) -> Iterator[TestClient]:
+    password_hash = bcrypt.hashpw(b"house-password", bcrypt.gensalt()).decode("utf-8")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'test.sqlite'}")
+    monkeypatch.setenv("COMMAND_CENTER_AUTH_ENABLED", "true")
+    monkeypatch.setenv("COMMAND_CENTER_PASSWORD_HASH", password_hash)
+    monkeypatch.setenv("COMMAND_CENTER_AUTH_SECRET", "test-cookie-signing-secret")
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_MAPS_MAP_ID", raising=False)
+
+    main = _reload_app()
+    with TestClient(main.app) as test_client:
+        yield test_client
+
+
+def test_logged_out_user_gets_login_page_instead_of_app_html(
+    auth_client: TestClient,
+) -> None:
+    response = auth_client.get("/food/", follow_redirects=True)
+
+    assert response.status_code == 200
+    assert "Command Center" in response.text
+    assert 'name="password"' in response.text
+    assert "Food Inventory" not in response.text
+
+
+def test_login_sets_cookie_and_allows_app_access(auth_client: TestClient) -> None:
+    login_response = auth_client.post(
+        "/login",
+        data={"password": "house-password", "next": "/food/"},
+        follow_redirects=False,
+    )
+
+    assert login_response.status_code == 303
+    assert login_response.headers["location"] == "/food/"
+    assert "command_center_auth=" in login_response.headers["set-cookie"]
+    assert "Max-Age=7776000" in login_response.headers["set-cookie"]
+
+    page_response = auth_client.get("/food/")
+    assert page_response.status_code == 200
+    assert "Food Inventory" in page_response.text
+
+
+def test_logout_clears_cookie_and_requires_login(auth_client: TestClient) -> None:
+    auth_client.post(
+        "/login",
+        data={"password": "house-password", "next": "/food/"},
+    )
+
+    logout_response = auth_client.post("/logout", follow_redirects=False)
+
+    assert logout_response.status_code == 303
+    assert logout_response.headers["location"] == "/login"
+    assert "command_center_auth=" in logout_response.headers["set-cookie"]
+
+    page_response = auth_client.get("/food/", follow_redirects=False)
+    assert page_response.status_code == 303
+    assert page_response.headers["location"].startswith("/login")
 
 
 def test_dashboard_renders(client: TestClient) -> None:

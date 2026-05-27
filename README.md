@@ -9,7 +9,7 @@ Private household command center for food inventory, grocery tracking, recipes, 
 - Dashboard summary
 - Food inventory add/list/delete flow
 - Local seed script
-- No authentication yet
+- Single-password authentication with a 90-day signed cookie
 
 ## Local Setup
 
@@ -39,6 +39,7 @@ Optional local overrides:
 export APP_NAME="Command Center"
 export APP_ENV="development"
 export DATABASE_URL="sqlite:///instance/dev.sqlite"
+export COMMAND_CENTER_AUTH_ENABLED="false"
 ```
 
 Production on EC2 should point at a persistent path and run in production mode:
@@ -46,7 +47,19 @@ Production on EC2 should point at a persistent path and run in production mode:
 ```bash
 export APP_ENV="production"
 export DATABASE_URL="sqlite:////var/lib/command-center/prod.sqlite"
+export COMMAND_CENTER_PASSWORD_HASH='$2b$12$replace-with-generated-bcrypt-hash'
+export COMMAND_CENTER_AUTH_SECRET="replace-with-long-random-secret"
 ```
+
+Authentication is enabled by default when `APP_ENV=production` and disabled by default in development. To enable it in development, set `COMMAND_CENTER_AUTH_ENABLED=true`.
+
+Generate a password hash with:
+
+```bash
+.venv/bin/python -c "import bcrypt; print(bcrypt.hashpw(b'your-password-here', bcrypt.gensalt()).decode())"
+```
+
+Use a long random value for `COMMAND_CENTER_AUTH_SECRET`. Rotating this secret logs out existing browsers.
 
 Example env files live in `deploy/env/`.
 
@@ -91,7 +104,7 @@ command.example.com      -> 127.0.0.1:8010 -> prod.sqlite
 command-dev.example.com  -> 127.0.0.1:8011 -> dev.sqlite
 ```
 
-The dev site should be protected before exposing it publicly. Until app authentication is added, use nginx basic auth or keep the dev hostname inaccessible outside your network/VPN.
+The dev site should be protected before exposing it publicly. App authentication is available with `COMMAND_CENTER_AUTH_ENABLED=true`; nginx basic auth is still acceptable as an extra guard on public dev hostnames.
 
 For the initial version, tables are created on startup if they do not exist. Once the schema settles into repeated changes, add Alembic migrations so deploys can evolve the production database deliberately.
 

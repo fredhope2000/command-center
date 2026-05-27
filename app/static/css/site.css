@@ -206,6 +206,42 @@ button.ghost:hover {
   color: var(--ink);
 }
 
+.logout-form {
+  margin-left: auto;
+}
+
+.logout-form button {
+  white-space: nowrap;
+}
+
+.login-page {
+  background: #eef3ef;
+}
+
+.login-shell {
+  align-items: center;
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 18px;
+  margin: 0 auto;
+  max-width: 380px;
+  padding: 24px;
+  width: 100%;
+}
+
+.login-panel h1 {
+  font-size: 1.7rem;
+}
+
 .confirming-delete {
   align-items: center;
   display: flex;
@@ -1484,6 +1520,10 @@ td form {
 
   .primary-action,
   button {
+    width: 100%;
+  }
+
+  .logout-form {
     width: 100%;
   }
 }

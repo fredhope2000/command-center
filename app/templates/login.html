@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign In - Command Center</title>
+    <link rel="icon" href="{{ static_asset('favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ static_asset('css/site.css') }}">
+  </head>
+  <body class="login-page">
+    <main class="login-shell">
+      <form class="login-panel" method="post" action="/login">
+        <div>
+          <p class="eyebrow">Private household dashboard</p>
+          <h1>Command Center</h1>
+        </div>
+        <input type="hidden" name="next" value="{{ next }}">
+        <label class="field">
+          <span>Password</span>
+          <input type="password" name="password" autocomplete="current-password" autofocus required>
+        </label>
+        <button class="button primary" type="submit">Sign in</button>
+      </form>
+    </main>
+  </body>
+</html>
