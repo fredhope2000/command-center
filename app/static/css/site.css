@@ -1502,6 +1502,7 @@ td form {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+    position: sticky;
   }
 
   .content {
@@ -1524,6 +1525,15 @@ td form {
   }
 
   .logout-form {
-    width: 100%;
+    position: absolute;
+    right: 12px;
+    top: 16px;
+    width: auto;
+  }
+
+  .logout-form button {
+    font-size: 0.86rem;
+    padding: 6px 9px;
+    width: auto;
   }
 }
