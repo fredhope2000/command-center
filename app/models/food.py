@@ -135,6 +135,7 @@ class RestaurantCategory(StrEnum):
     PARTY_OF_ONE = "party_of_one"
     DATE_NIGHT = "date_night"
     CASUAL_DATES = "casual_dates"
+    LINDA_ONLY = "linda_only"
     DESSERT = "dessert"
 
 

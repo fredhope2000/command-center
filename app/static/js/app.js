@@ -415,6 +415,7 @@ function restaurantCategoryLabel(category) {
       party_of_one: "Party of One",
       date_night: "Date Night",
       casual_dates: "Casual Dates",
+      linda_only: "Linda Only",
       dessert: "Dessert",
     }[category] || ""
   );
@@ -649,7 +650,7 @@ function selectRestaurant(restaurantId) {
           Category
           <select name="category">
             <option value="">Uncategorized</option>
-            ${["party_of_one", "date_night", "casual_dates", "dessert"]
+            ${["party_of_one", "date_night", "casual_dates", "linda_only", "dessert"]
               .map(
                 (category) =>
                   `<option value="${category}" ${
@@ -1002,12 +1003,17 @@ function renderRestaurantMarkers(shell, restaurants, options = {}) {
       "--restaurant-marker-color",
       restaurantMarkerColor(restaurant.status),
     );
-    markerElement.textContent = restaurant.name.charAt(0).toUpperCase();
+    markerElement.setAttribute("aria-label", restaurant.name);
+    markerElement.append(document.createTextNode(restaurant.name.charAt(0).toUpperCase()));
+
+    const tooltip = document.createElement("span");
+    tooltip.className = "restaurant-marker-tooltip";
+    tooltip.textContent = restaurant.name;
+    markerElement.append(tooltip);
 
     const marker = new google.maps.marker.AdvancedMarkerElement({
       map: restaurantState.map,
       position: { lat: restaurant.latitude, lng: restaurant.longitude },
-      title: restaurant.name,
       content: markerElement,
     });
     marker.addListener("click", () => selectRestaurant(restaurant.id));

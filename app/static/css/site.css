@@ -1540,12 +1540,43 @@ td form {
   height: 30px;
   justify-content: center;
   padding: 0;
+  position: relative;
   width: 30px;
 }
 
 .restaurant-marker:hover {
   background: var(--restaurant-marker-color);
   transform: translateY(-1px);
+}
+
+.restaurant-marker-tooltip {
+  background: rgba(30, 32, 28, 0.94);
+  border-radius: 6px;
+  bottom: calc(100% + 8px);
+  box-shadow: 0 4px 12px rgba(15, 39, 66, 0.22);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  left: 50%;
+  line-height: 1.2;
+  max-width: 220px;
+  opacity: 0;
+  overflow: hidden;
+  padding: 6px 8px;
+  pointer-events: none;
+  position: absolute;
+  text-overflow: ellipsis;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.12s ease 0s, transform 0.12s ease 0s;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.restaurant-marker:hover .restaurant-marker-tooltip,
+.restaurant-marker:focus-visible .restaurant-marker-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0.25s;
 }
 
 .config-warning {

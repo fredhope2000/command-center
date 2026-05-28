@@ -112,6 +112,7 @@ def _category_label(category: str) -> str:
         RestaurantCategory.PARTY_OF_ONE.value: "Party of One",
         RestaurantCategory.DATE_NIGHT.value: "Date Night",
         RestaurantCategory.CASUAL_DATES.value: "Casual Dates",
+        RestaurantCategory.LINDA_ONLY.value: "Linda Only",
         RestaurantCategory.DESSERT.value: "Dessert",
     }.get(category, category.replace("_", " ").title())
 
