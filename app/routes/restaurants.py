@@ -2,15 +2,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models.food import Restaurant, RestaurantCategory, RestaurantStatus
+from app.models.food import (
+    Restaurant,
+    RestaurantCategory,
+    RestaurantPhoto,
+    RestaurantStatus,
+)
 from app.routes.pages import templates
+from app.services.restaurant_photos import (
+    delete_restaurant_photo,
+    upload_restaurant_photo,
+)
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 
@@ -58,6 +67,17 @@ def _restaurant_payload(restaurant: Restaurant) -> dict[str, Any]:
         "personal_rating": restaurant.personal_rating,
         "price_level": restaurant.price_level,
         "notes": restaurant.notes,
+        "photos": [_restaurant_photo_payload(photo) for photo in restaurant.photos],
+    }
+
+
+def _restaurant_photo_payload(photo: RestaurantPhoto) -> dict[str, Any]:
+    return {
+        "id": photo.id,
+        "url": photo.url,
+        "original_filename": photo.original_filename,
+        "content_type": photo.content_type,
+        "created_at": photo.created_at.isoformat(),
     }
 
 
@@ -217,8 +237,71 @@ def delete_restaurant(
 ):
     restaurant = db.get(Restaurant, restaurant_id)
     if restaurant is not None:
+        photo_keys = [photo.storage_key for photo in restaurant.photos]
         db.delete(restaurant)
         db.commit()
+        for storage_key in photo_keys:
+            delete_restaurant_photo(storage_key)
     if _wants_json(request):
         return JSONResponse({"deleted": restaurant_id})
     return RedirectResponse("/restaurants/", status_code=303)
+
+
+@router.post("/{restaurant_id}/photos")
+def add_restaurant_photo(
+    restaurant_id: int,
+    photo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    restaurant = db.get(Restaurant, restaurant_id)
+    if restaurant is None:
+        return JSONResponse({"error": "Restaurant not found."}, status_code=404)
+
+    try:
+        uploaded = upload_restaurant_photo(photo, restaurant_id)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    restaurant_photo = RestaurantPhoto(
+        restaurant_id=restaurant.id,
+        storage_key=uploaded["storage_key"],
+        url=uploaded["url"],
+        original_filename=_clean(photo.filename),
+        content_type=uploaded["content_type"],
+    )
+    db.add(restaurant_photo)
+    db.commit()
+    db.refresh(restaurant_photo)
+    db.refresh(restaurant)
+
+    return JSONResponse(
+        {
+            "photo": _restaurant_photo_payload(restaurant_photo),
+            "restaurant": _restaurant_payload(restaurant),
+        },
+        status_code=201,
+    )
+
+
+@router.post("/{restaurant_id}/photos/{photo_id}/delete")
+def remove_restaurant_photo(
+    restaurant_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+):
+    photo = db.get(RestaurantPhoto, photo_id)
+    if photo is None or photo.restaurant_id != restaurant_id:
+        return JSONResponse({"error": "Photo not found."}, status_code=404)
+
+    storage_key = photo.storage_key
+    db.delete(photo)
+    db.commit()
+    delete_restaurant_photo(storage_key)
+
+    restaurant = db.get(Restaurant, restaurant_id)
+    return JSONResponse(
+        {
+            "deleted": photo_id,
+            "restaurant": _restaurant_payload(restaurant) if restaurant else None,
+        }
+    )

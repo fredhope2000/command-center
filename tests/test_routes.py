@@ -16,12 +16,21 @@ def _reload_app() -> object:
     return importlib.import_module("app.main")
 
 
+def _reload_config() -> object:
+    for name in list(sys.modules):
+        if name == "app.config":
+            sys.modules.pop(name)
+    return importlib.import_module("app.config")
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'test.sqlite'}")
     monkeypatch.setenv("COMMAND_CENTER_AUTH_ENABLED", "false")
     monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_MAPS_MAP_ID", raising=False)
+    monkeypatch.delenv("RESTAURANT_PHOTOS_S3_BUCKET", raising=False)
+    monkeypatch.delenv("RESTAURANT_PHOTOS_BASE_URL", raising=False)
 
     main = _reload_app()
     with TestClient(main.app) as test_client:
@@ -37,6 +46,8 @@ def auth_client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("COMMAND_CENTER_AUTH_SECRET", "test-cookie-signing-secret")
     monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_MAPS_MAP_ID", raising=False)
+    monkeypatch.delenv("RESTAURANT_PHOTOS_S3_BUCKET", raising=False)
+    monkeypatch.delenv("RESTAURANT_PHOTOS_BASE_URL", raising=False)
 
     main = _reload_app()
     with TestClient(main.app) as test_client:
@@ -86,6 +97,26 @@ def test_logout_clears_cookie_and_requires_login(auth_client: TestClient) -> Non
     page_response = auth_client.get("/food/", follow_redirects=False)
     assert page_response.status_code == 303
     assert page_response.headers["location"].startswith("/login")
+
+
+def test_restaurant_photo_storage_defaults_follow_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("RESTAURANT_PHOTOS_S3_BUCKET", raising=False)
+    monkeypatch.delenv("RESTAURANT_PHOTOS_BASE_URL", raising=False)
+    monkeypatch.delenv("RESTAURANT_PHOTOS_S3_PREFIX", raising=False)
+
+    monkeypatch.setenv("APP_ENV", "development")
+    config = _reload_config()
+    assert config.settings.restaurant_photos_s3_bucket == "fredhopedotcom"
+    assert config.settings.restaurant_photos_base_url == "https://fredhope.com"
+    assert config.settings.restaurant_photos_s3_prefix == "ec2/command-center-dev"
+
+    monkeypatch.setenv("APP_ENV", "production")
+    config = _reload_config()
+    assert config.settings.restaurant_photos_s3_bucket == "fredhopedotcom"
+    assert config.settings.restaurant_photos_base_url == "https://fredhope.com"
+    assert config.settings.restaurant_photos_s3_prefix == "ec2/command-center"
 
 
 def test_dashboard_renders(client: TestClient) -> None:
@@ -582,6 +613,7 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
     assert restaurant["category_label"] == "Casual Dates"
     assert restaurant["personal_rating"] == 5
     assert restaurant["notes"] == "Order the rigatoni."
+    assert restaurant["photos"] == []
 
     custom_name_response = client.post(
         "/restaurants/1",
@@ -612,6 +644,70 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
     assert clear_name_response.json()["name"] == "Test Bistro"
     assert clear_name_response.json()["google_name"] == "Test Bistro"
     assert clear_name_response.json()["custom_name"] is None
+
+
+def test_restaurant_photos_can_be_uploaded_and_removed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.routes import restaurants as restaurant_routes
+
+    uploaded_keys: list[str] = []
+    deleted_keys: list[str] = []
+
+    def fake_upload(upload_file, restaurant_id: int) -> dict[str, str]:
+        uploaded_keys.append(f"restaurants/{restaurant_id}/photo.jpg")
+        return {
+            "storage_key": uploaded_keys[-1],
+            "url": f"https://cdn.example.test/{uploaded_keys[-1]}",
+            "content_type": "image/jpeg",
+        }
+
+    monkeypatch.setattr(restaurant_routes, "upload_restaurant_photo", fake_upload)
+    monkeypatch.setattr(
+        restaurant_routes, "delete_restaurant_photo", deleted_keys.append
+    )
+
+    create_response = client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "photo-place-1",
+            "name": "Photo Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    assert create_response.status_code == 201
+
+    image_buffer = BytesIO()
+    Image.new("RGB", (4, 4), color="red").save(image_buffer, format="PNG")
+    image_buffer.seek(0)
+
+    upload_response = client.post(
+        "/restaurants/1/photos",
+        files={"photo": ("dish.png", image_buffer, "image/png")},
+    )
+    assert upload_response.status_code == 201
+    assert upload_response.json()["photo"]["url"] == (
+        "https://cdn.example.test/restaurants/1/photo.jpg"
+    )
+    assert upload_response.json()["restaurant"]["photos"][0]["original_filename"] == (
+        "dish.png"
+    )
+
+    data_response = client.get("/restaurants/data")
+    assert data_response.json()["restaurants"][0]["photos"][0]["url"] == (
+        "https://cdn.example.test/restaurants/1/photo.jpg"
+    )
+
+    delete_response = client.post("/restaurants/1/photos/1/delete")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] == 1
+    assert delete_response.json()["restaurant"]["photos"] == []
+    assert deleted_keys == ["restaurants/1/photo.jpg"]
 
 
 def test_restaurant_legacy_statuses_are_migrated_to_visited(

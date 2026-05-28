@@ -11,6 +11,19 @@ class Settings:
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///instance/dev.sqlite")
     google_maps_api_key: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
     google_maps_map_id: str = os.getenv("GOOGLE_MAPS_MAP_ID", "")
+    aws_region: str = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION", "")
+    restaurant_photos_s3_bucket: str = os.getenv(
+        "RESTAURANT_PHOTOS_S3_BUCKET", "fredhopedotcom"
+    )
+    restaurant_photos_s3_prefix: str = os.getenv(
+        "RESTAURANT_PHOTOS_S3_PREFIX",
+        "ec2/command-center"
+        if os.getenv("APP_ENV", "development").strip().lower() == "production"
+        else "ec2/command-center-dev",
+    ).strip("/")
+    restaurant_photos_base_url: str = os.getenv(
+        "RESTAURANT_PHOTOS_BASE_URL", "https://fredhope.com"
+    ).rstrip("/")
     auth_enabled: bool = os.getenv(
         "COMMAND_CENTER_AUTH_ENABLED",
         "true" if os.getenv("APP_ENV", "development").strip().lower() == "production" else "false",

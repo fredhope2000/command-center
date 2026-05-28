@@ -1338,6 +1338,84 @@ td form {
   margin: 0;
 }
 
+.restaurant-photo-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.restaurant-photo-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.restaurant-photo {
+  aspect-ratio: 1;
+  background: #f3f5f2;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.restaurant-photo img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.restaurant-photo-remove {
+  align-items: center;
+  background: rgba(30, 32, 28, 0.72);
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  display: flex;
+  font-size: 1rem;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 26px;
+}
+
+.restaurant-photo-remove:hover {
+  background: rgba(30, 32, 28, 0.9);
+}
+
+.restaurant-photo-upload {
+  margin: 0;
+}
+
+.restaurant-photo-upload-control {
+  align-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  color: var(--accent);
+  cursor: pointer;
+  display: flex;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px;
+}
+
+.restaurant-photo-upload-control:hover {
+  background: #f7faf6;
+}
+
+.restaurant-photo-upload-control input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
 .restaurant-marker {
   align-items: center;
   background: var(--restaurant-marker-color);

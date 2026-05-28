@@ -61,6 +61,13 @@ Generate a password hash with:
 
 Use a long random value for `COMMAND_CENTER_AUTH_SECRET`. Rotating this secret logs out existing browsers.
 
+Restaurant photo uploads use S3 object storage served through the existing
+`fredhope.com` CloudFront setup. By default uploads go to the `fredhopedotcom`
+bucket under `ec2/command-center` in production and `ec2/command-center-dev`
+elsewhere. Override `RESTAURANT_PHOTOS_S3_BUCKET`,
+`RESTAURANT_PHOTOS_S3_PREFIX`, or `RESTAURANT_PHOTOS_BASE_URL` only if that
+storage layout changes.
+
 Example env files live in `deploy/env/`.
 
 Recommended environment/database combinations:

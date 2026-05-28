@@ -171,3 +171,27 @@ class Restaurant(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+    photos: Mapped[list["RestaurantPhoto"]] = relationship(
+        back_populates="restaurant",
+        cascade="all, delete-orphan",
+        order_by="RestaurantPhoto.created_at",
+    )
+
+
+class RestaurantPhoto(Base):
+    __tablename__ = "restaurant_photos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id"), nullable=False, index=True
+    )
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
+    url: Mapped[str] = mapped_column(String(800), nullable=False)
+    original_filename: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    content_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+
+    restaurant: Mapped[Restaurant] = relationship(back_populates="photos")

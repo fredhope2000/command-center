@@ -550,6 +550,36 @@ function isGooglePlacesSuggestionClick(target) {
   return Boolean(target.closest?.(".pac-container"));
 }
 
+function renderRestaurantPhotos(restaurant) {
+  const photos = restaurant.photos || [];
+  const gallery = photos.length
+    ? `<div class="restaurant-photo-grid">
+        ${photos
+          .map(
+            (photo) => `
+              <figure class="restaurant-photo">
+                <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(restaurant.name)} photo" loading="lazy">
+                <button class="restaurant-photo-remove" type="button" data-delete-restaurant-photo="${photo.id}" aria-label="Remove photo">×</button>
+              </figure>
+            `,
+          )
+          .join("")}
+      </div>`
+    : "";
+
+  return `
+    <div class="restaurant-photo-section">
+      ${gallery}
+      <form class="restaurant-photo-upload" action="/restaurants/${restaurant.id}/photos" method="post" enctype="multipart/form-data" data-restaurant-photo-upload>
+        <label class="restaurant-photo-upload-control">
+          <span>Add photo</span>
+          <input type="file" name="photo" accept="image/*">
+        </label>
+      </form>
+    </div>
+  `;
+}
+
 function selectRestaurant(restaurantId) {
   restaurantState.selectedId = restaurantId;
   const restaurant = restaurantState.restaurants.find(
@@ -666,6 +696,7 @@ function selectRestaurant(restaurantId) {
         <textarea name="notes" rows="5" placeholder="What to order, who recommended it, visit notes">${escapeHtml(restaurant.notes)}</textarea>
       </label>
     </form>
+    ${renderRestaurantPhotos(restaurant)}
     <div class="restaurant-detail-actions">
       <button form="restaurant-detail-form-${restaurant.id}" type="submit">Save</button>
       <form class="restaurant-delete-form js-confirm-delete" action="/restaurants/${restaurant.id}/delete" method="post">
@@ -693,10 +724,82 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector(".restaurant-detail-form")
     ?.addEventListener("submit", saveRestaurantDetailForm);
+  panel
+    .querySelector("[data-restaurant-photo-upload] input")
+    ?.addEventListener("change", uploadRestaurantPhoto);
+  panel.querySelectorAll("[data-delete-restaurant-photo]").forEach((button) => {
+    button.addEventListener("click", deleteRestaurantPhoto);
+  });
   wireConfirmDeleteForms();
   panel
     .querySelector(".restaurant-delete-form")
     ?.addEventListener("submit", deleteRestaurantDetailForm);
+}
+
+async function uploadRestaurantPhoto(event) {
+  const input = event.currentTarget;
+  const form = input.closest("form");
+  if (!form || !input.files.length) {
+    return;
+  }
+
+  const formData = new FormData(form);
+  input.disabled = true;
+  try {
+    const response = await fetch(form.action, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body: formData,
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not upload photo.");
+    }
+    updateRestaurantFromPayload(payload.restaurant);
+    selectRestaurant(payload.restaurant.id);
+  } finally {
+    form.reset();
+    input.disabled = false;
+  }
+}
+
+async function deleteRestaurantPhoto(event) {
+  const button = event.currentTarget;
+  const photoId = button.dataset.deleteRestaurantPhoto;
+  const restaurantId = restaurantState.selectedId;
+  if (!photoId || !restaurantId) {
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const response = await fetch(
+      `/restaurants/${restaurantId}/photos/${photoId}/delete`,
+      {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      },
+    );
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not delete photo.");
+    }
+    if (payload.restaurant) {
+      updateRestaurantFromPayload(payload.restaurant);
+      selectRestaurant(payload.restaurant.id);
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function updateRestaurantFromPayload(payload) {
+  const index = restaurantState.restaurants.findIndex(
+    (restaurant) => restaurant.id === payload.id,
+  );
+  if (index >= 0) {
+    restaurantState.restaurants[index] = payload;
+  }
 }
 
 async function saveRestaurantDetailForm(event) {
@@ -718,12 +821,7 @@ async function saveRestaurantDetailForm(event) {
       throw new Error(payload.error || "Could not save restaurant.");
     }
 
-    const index = restaurantState.restaurants.findIndex(
-      (restaurant) => restaurant.id === payload.id,
-    );
-    if (index >= 0) {
-      restaurantState.restaurants[index] = payload;
-    }
+    updateRestaurantFromPayload(payload);
     renderRestaurants({ fitMap: false });
     closeRestaurantDetail();
   } finally {
