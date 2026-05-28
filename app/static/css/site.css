@@ -1403,6 +1403,52 @@ td form {
   background: rgba(30, 32, 28, 0.9);
 }
 
+.restaurant-photo-delete-confirm {
+  align-items: center;
+  background: rgba(30, 32, 28, 0.82);
+  color: #ffffff;
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 8px;
+  inset: 0;
+  justify-content: center;
+  justify-items: center;
+  padding: 10px;
+  place-content: center;
+  position: absolute;
+  text-align: center;
+  z-index: 2;
+}
+
+.restaurant-photo-delete-confirm div {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+
+.restaurant-photo-delete-confirm button {
+  border: 0;
+  flex: 0 1 auto;
+  font-size: 0.74rem;
+  min-height: 28px;
+  min-width: 0;
+  padding: 5px 8px;
+  width: auto;
+}
+
+.restaurant-photo-delete-confirm button.ghost {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.restaurant-photo-delete-confirm button.ghost:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
 .restaurant-photo-upload {
   margin: 0;
 }
@@ -1725,6 +1771,10 @@ td form {
 
   .restaurant-photo-remove {
     width: 26px;
+  }
+
+  .restaurant-photo-delete-confirm button {
+    width: auto;
   }
 
   .restaurant-photo-overlay-close {

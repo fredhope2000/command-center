@@ -562,7 +562,7 @@ function renderRestaurantPhotos(restaurant) {
                 <button class="restaurant-photo-preview" type="button" data-restaurant-photo-preview="${escapeHtml(photo.url)}" aria-label="View larger photo">
                   <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(restaurant.name)} photo" loading="lazy">
                 </button>
-                <button class="restaurant-photo-remove" type="button" data-delete-restaurant-photo="${photo.id}" aria-label="Remove photo">×</button>
+                <button class="restaurant-photo-remove" type="button" data-confirm-delete-restaurant-photo="${photo.id}" aria-label="Remove photo">×</button>
               </figure>
             `,
           )
@@ -731,9 +731,7 @@ function selectRestaurant(restaurantId) {
     .querySelector("[data-restaurant-photo-upload] input")
     ?.addEventListener("change", uploadRestaurantPhoto);
   panel.addEventListener("click", handleRestaurantPhotoPreviewClick);
-  panel.querySelectorAll("[data-delete-restaurant-photo]").forEach((button) => {
-    button.addEventListener("click", deleteRestaurantPhoto);
-  });
+  panel.addEventListener("click", handleRestaurantPhotoDeleteClick);
   wireConfirmDeleteForms();
   panel
     .querySelector(".restaurant-delete-form")
@@ -779,6 +777,42 @@ function closeRestaurantPhotoOverlay() {
   document.querySelector("[data-restaurant-photo-overlay]")?.remove();
 }
 
+function handleRestaurantPhotoDeleteClick(event) {
+  const confirmButton = event.target.closest("[data-delete-restaurant-photo]");
+  if (confirmButton) {
+    deleteRestaurantPhoto(confirmButton);
+    return;
+  }
+
+  const cancelButton = event.target.closest("[data-cancel-delete-restaurant-photo]");
+  if (cancelButton) {
+    cancelButton.closest(".restaurant-photo-delete-confirm")?.remove();
+    return;
+  }
+
+  const removeButton = event.target.closest("[data-confirm-delete-restaurant-photo]");
+  if (!removeButton) {
+    return;
+  }
+
+  const photo = removeButton.closest(".restaurant-photo");
+  if (!photo) {
+    return;
+  }
+
+  photo.querySelector(".restaurant-photo-delete-confirm")?.remove();
+  const confirmation = document.createElement("div");
+  confirmation.className = "restaurant-photo-delete-confirm";
+  confirmation.innerHTML = `
+    <span>Are you sure?</span>
+    <div>
+      <button type="button" data-delete-restaurant-photo="${removeButton.dataset.confirmDeleteRestaurantPhoto}">Delete</button>
+      <button type="button" class="ghost" data-cancel-delete-restaurant-photo>Cancel</button>
+    </div>
+  `;
+  photo.append(confirmation);
+}
+
 async function uploadRestaurantPhoto(event) {
   const input = event.currentTarget;
   const form = input.closest("form");
@@ -806,8 +840,7 @@ async function uploadRestaurantPhoto(event) {
   }
 }
 
-async function deleteRestaurantPhoto(event) {
-  const button = event.currentTarget;
+async function deleteRestaurantPhoto(button) {
   const photoId = button.dataset.deleteRestaurantPhoto;
   const restaurantId = restaurantState.selectedId;
   if (!photoId || !restaurantId) {
