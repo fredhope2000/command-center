@@ -558,7 +558,9 @@ function renderRestaurantPhotos(restaurant) {
           .map(
             (photo) => `
               <figure class="restaurant-photo">
-                <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(restaurant.name)} photo" loading="lazy">
+                <button class="restaurant-photo-preview" type="button" data-restaurant-photo-preview="${escapeHtml(photo.url)}" aria-label="View larger photo">
+                  <img src="${escapeHtml(photo.url)}" alt="${escapeHtml(restaurant.name)} photo" loading="lazy">
+                </button>
                 <button class="restaurant-photo-remove" type="button" data-delete-restaurant-photo="${photo.id}" aria-label="Remove photo">×</button>
               </figure>
             `,
@@ -727,6 +729,9 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector("[data-restaurant-photo-upload] input")
     ?.addEventListener("change", uploadRestaurantPhoto);
+  panel.querySelectorAll("[data-restaurant-photo-preview]").forEach((button) => {
+    button.addEventListener("click", showRestaurantPhotoOverlay);
+  });
   panel.querySelectorAll("[data-delete-restaurant-photo]").forEach((button) => {
     button.addEventListener("click", deleteRestaurantPhoto);
   });
@@ -734,6 +739,35 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector(".restaurant-delete-form")
     ?.addEventListener("submit", deleteRestaurantDetailForm);
+}
+
+function showRestaurantPhotoOverlay(event) {
+  const button = event.currentTarget;
+  const url = button.dataset.restaurantPhotoPreview;
+  const panel = button.closest("[data-restaurant-detail]");
+  if (!url || !panel) {
+    return;
+  }
+
+  panel.querySelector("[data-restaurant-photo-overlay]")?.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "restaurant-photo-overlay";
+  overlay.dataset.restaurantPhotoOverlay = "";
+  overlay.innerHTML = `
+    <div class="restaurant-photo-overlay-frame">
+      <button class="restaurant-photo-overlay-close" type="button" aria-label="Close photo">×</button>
+      <img src="${escapeHtml(url)}" alt="">
+    </div>
+  `;
+  overlay.addEventListener("click", (overlayEvent) => {
+    if (
+      overlayEvent.target === overlay ||
+      overlayEvent.target.closest(".restaurant-photo-overlay-close")
+    ) {
+      overlay.remove();
+    }
+  });
+  panel.append(overlay);
 }
 
 async function uploadRestaurantPhoto(event) {
