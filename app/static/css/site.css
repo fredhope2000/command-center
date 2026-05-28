@@ -1774,9 +1774,13 @@ td form {
   }
 
   .restaurant-photo-delete-confirm button {
-    font-size: 0.62rem;
-    min-height: 24px;
-    padding: 3px 5px;
+    align-items: center;
+    display: inline-flex;
+    font-size: 0.58rem;
+    justify-content: center;
+    line-height: 1;
+    min-height: 22px;
+    padding: 3px 5px 2px;
     width: auto;
   }
 
