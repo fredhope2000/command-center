@@ -217,6 +217,14 @@ button.ghost:hover {
 }
 
 .logout-form {
+  margin: 0;
+}
+
+.mobile-logout-form {
+  display: none;
+}
+
+.desktop-logout-form {
   margin-top: auto;
 }
 
@@ -1418,6 +1426,14 @@ td form {
   .logout-form {
     margin-left: auto;
     margin-top: 0;
+  }
+
+  .mobile-logout-form {
+    display: block;
+  }
+
+  .desktop-logout-form {
+    display: none;
   }
 
   .topbar,

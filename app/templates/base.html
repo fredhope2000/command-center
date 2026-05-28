@@ -25,7 +25,7 @@
             </span>
           </a>
           {% if settings.auth_enabled %}
-            <form class="logout-form" method="post" action="/logout">
+            <form class="logout-form mobile-logout-form" method="post" action="/logout">
               <button class="button ghost" type="submit">Sign out</button>
             </form>
           {% endif %}
@@ -39,6 +39,11 @@
           <a class="{{ 'active' if active_nav == 'restaurants' else '' }}" href="/restaurants/">Restaurants</a>
           <a class="disabled" href="#" aria-disabled="true">Finances</a>
         </nav>
+        {% if settings.auth_enabled %}
+          <form class="logout-form desktop-logout-form" method="post" action="/logout">
+            <button class="button ghost" type="submit">Sign out</button>
+          </form>
+        {% endif %}
       </aside>
 
       <div class="workspace">
