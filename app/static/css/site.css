@@ -1374,6 +1374,7 @@ td form {
   display: block;
   height: 100%;
   padding: 0;
+  touch-action: manipulation;
   width: 100%;
 }
 
@@ -1437,11 +1438,11 @@ td form {
   display: flex;
   justify-content: center;
   left: 0;
-  padding: 18px;
-  position: absolute;
+  padding: 28px;
+  position: fixed;
   right: 0;
   top: 0;
-  z-index: 3;
+  z-index: 20;
 }
 
 .restaurant-photo-overlay-frame {
@@ -1454,8 +1455,8 @@ td form {
   border-radius: 8px;
   box-shadow: 0 18px 48px rgba(15, 39, 66, 0.35);
   display: block;
-  max-height: calc(100vh - 120px);
-  max-width: 100%;
+  max-height: calc(100vh - 56px);
+  max-width: calc(100vw - 56px);
   object-fit: contain;
 }
 
@@ -1716,5 +1717,26 @@ td form {
     font-size: 0.86rem;
     padding: 6px 9px;
     width: auto;
+  }
+
+  .restaurant-photo-preview {
+    width: 100%;
+  }
+
+  .restaurant-photo-remove {
+    width: 26px;
+  }
+
+  .restaurant-photo-overlay-close {
+    width: 30px;
+  }
+
+  .restaurant-photo-overlay {
+    padding: 14px;
+  }
+
+  .restaurant-photo-overlay-frame img {
+    max-height: calc(100vh - 28px);
+    max-width: calc(100vw - 28px);
   }
 }

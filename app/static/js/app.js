@@ -480,6 +480,7 @@ function filteredRestaurants(shell) {
 }
 
 function closeRestaurantDetail() {
+  closeRestaurantPhotoOverlay();
   const panel = document.querySelector("[data-restaurant-detail]");
   if (panel) {
     panel.hidden = true;
@@ -729,9 +730,7 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector("[data-restaurant-photo-upload] input")
     ?.addEventListener("change", uploadRestaurantPhoto);
-  panel.querySelectorAll("[data-restaurant-photo-preview]").forEach((button) => {
-    button.addEventListener("click", showRestaurantPhotoOverlay);
-  });
+  panel.addEventListener("click", handleRestaurantPhotoPreviewClick);
   panel.querySelectorAll("[data-delete-restaurant-photo]").forEach((button) => {
     button.addEventListener("click", deleteRestaurantPhoto);
   });
@@ -741,15 +740,21 @@ function selectRestaurant(restaurantId) {
     ?.addEventListener("submit", deleteRestaurantDetailForm);
 }
 
-function showRestaurantPhotoOverlay(event) {
-  const button = event.currentTarget;
+function handleRestaurantPhotoPreviewClick(event) {
+  const button = event.target.closest("[data-restaurant-photo-preview]");
+  if (!button) {
+    return;
+  }
+  showRestaurantPhotoOverlay(button);
+}
+
+function showRestaurantPhotoOverlay(button) {
   const url = button.dataset.restaurantPhotoPreview;
-  const panel = button.closest("[data-restaurant-detail]");
-  if (!url || !panel) {
+  if (!url) {
     return;
   }
 
-  panel.querySelector("[data-restaurant-photo-overlay]")?.remove();
+  closeRestaurantPhotoOverlay();
   const overlay = document.createElement("div");
   overlay.className = "restaurant-photo-overlay";
   overlay.dataset.restaurantPhotoOverlay = "";
@@ -767,7 +772,11 @@ function showRestaurantPhotoOverlay(event) {
       overlay.remove();
     }
   });
-  panel.append(overlay);
+  document.body.append(overlay);
+}
+
+function closeRestaurantPhotoOverlay() {
+  document.querySelector("[data-restaurant-photo-overlay]")?.remove();
 }
 
 async function uploadRestaurantPhoto(event) {
