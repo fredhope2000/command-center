@@ -1774,6 +1774,9 @@ td form {
   }
 
   .restaurant-photo-delete-confirm button {
+    font-size: 0.68rem;
+    min-height: 26px;
+    padding: 4px 6px;
     width: auto;
   }
 
