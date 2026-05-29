@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from io import BytesIO
 from dataclasses import dataclass
@@ -15,6 +16,8 @@ import httpx
 from app.config import settings
 from app.models.food import Restaurant
 
+
+logger = logging.getLogger(__name__)
 
 MAX_MENU_PAGES = 6
 MAX_EXTRACTED_TEXT = 120_000
@@ -84,6 +87,10 @@ def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
     if not settings.is_production:
         return _mock_menu_result(restaurant)
     if not restaurant.website_uri:
+        logger.info(
+            "Restaurant menu refresh skipped without website",
+            extra={"restaurant_id": restaurant.id, "restaurant_name": restaurant.name},
+        )
         return MenuFetchResult(
             source_url=None,
             extracted_text="",
@@ -92,8 +99,26 @@ def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
             error_message="Add a website before fetching the menu.",
         )
 
+    logger.info(
+        "Restaurant menu refresh started",
+        extra={
+            "restaurant_id": restaurant.id,
+            "restaurant_name": restaurant.name,
+            "website_url": restaurant.website_uri,
+        },
+    )
     extracted = _fetch_menu_text(restaurant.website_uri)
     if not extracted.extracted_text:
+        logger.warning(
+            "Restaurant menu refresh failed before AI",
+            extra={
+                "restaurant_id": restaurant.id,
+                "restaurant_name": restaurant.name,
+                "website_url": restaurant.website_uri,
+                "status": extracted.status,
+                "error_message": extracted.error_message,
+            },
+        )
         return extracted
     if not settings.restaurant_ai_enabled:
         return MenuFetchResult(
@@ -108,6 +133,14 @@ def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
             restaurant, extracted.extracted_text
         )
     except Exception as exc:
+        logger.exception(
+            "Restaurant menu AI structuring failed",
+            extra={
+                "restaurant_id": restaurant.id,
+                "restaurant_name": restaurant.name,
+                "source_url": extracted.source_url,
+            },
+        )
         return MenuFetchResult(
             source_url=extracted.source_url,
             extracted_text=extracted.extracted_text,
@@ -115,6 +148,16 @@ def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
             status="fetched_without_ai",
             error_message=f"AI menu structuring failed: {exc}",
         )
+    logger.info(
+        "Restaurant menu refresh completed",
+        extra={
+            "restaurant_id": restaurant.id,
+            "restaurant_name": restaurant.name,
+            "source_url": extracted.source_url,
+            "text_length": len(extracted.extracted_text),
+            "item_count": len(structured_json.get("items") or []),
+        },
+    )
     return MenuFetchResult(
         source_url=extracted.source_url,
         extracted_text=extracted.extracted_text,
@@ -124,6 +167,7 @@ def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
 
 
 def _fetch_menu_text(website_url: str) -> MenuFetchResult:
+    fetch_errors: list[str] = []
     try:
         with httpx.Client(
             follow_redirects=True,
@@ -132,32 +176,73 @@ def _fetch_menu_text(website_url: str) -> MenuFetchResult:
         ) as client:
             first_page = _fetch_page(client, website_url)
             candidate_urls = _menu_candidate_urls(website_url, first_page.links)
+            logger.info(
+                "Restaurant menu candidate URLs found",
+                extra={
+                    "website_url": website_url,
+                    "candidate_count": len(candidate_urls),
+                    "candidate_urls": candidate_urls[:MAX_MENU_PAGES],
+                },
+            )
             texts: list[str] = []
             source_url = first_page.url
             for url in candidate_urls[:MAX_MENU_PAGES]:
-                page = first_page if url == first_page.url else _fetch_page(client, url)
+                try:
+                    page = first_page if url == first_page.url else _fetch_page(client, url)
+                except httpx.HTTPError as exc:
+                    message = _http_error_message(exc, url)
+                    fetch_errors.append(message)
+                    logger.warning(
+                        "Restaurant menu candidate fetch failed",
+                        extra={"candidate_url": url, "error_message": message},
+                    )
+                    continue
+                logger.info(
+                    "Restaurant menu candidate fetched",
+                    extra={
+                        "candidate_url": url,
+                        "resolved_url": page.url,
+                        "text_length": len(page.text),
+                        "link_count": len(page.links),
+                        "accepted": bool(
+                            MENU_LINK_RE.search(url) or _looks_like_menu_text(page.text)
+                        ),
+                    },
+                )
                 if MENU_LINK_RE.search(url) or _looks_like_menu_text(page.text):
                     source_url = page.url
                     texts.append(page.text)
                 if sum(len(text) for text in texts) >= MAX_EXTRACTED_TEXT:
                     break
     except httpx.HTTPError as exc:
+        message = _http_error_message(exc, website_url)
+        logger.exception(
+            "Restaurant menu HTTP fetch failed",
+            extra={"website_url": website_url},
+        )
         return MenuFetchResult(
             source_url=website_url,
             extracted_text="",
             structured_json={"items": [], "summary": "Menu fetch failed."},
             status="failed",
-            error_message=str(exc),
+            error_message=message,
         )
 
     text = _clean_text("\n".join(texts))[:MAX_EXTRACTED_TEXT]
     if not text:
+        error_message = "No menu-like text found on the restaurant website."
+        if fetch_errors:
+            error_message = f"{error_message} Fetch errors: {'; '.join(fetch_errors[:3])}"
+        logger.warning(
+            "Restaurant menu fetch found no menu-like text",
+            extra={"website_url": website_url, "fetch_errors": fetch_errors},
+        )
         return MenuFetchResult(
             source_url=website_url,
             extracted_text="",
             structured_json={"items": [], "summary": "No menu-like text found."},
             status="failed",
-            error_message="No menu-like text found on the restaurant website.",
+            error_message=error_message,
         )
     return MenuFetchResult(
         source_url=source_url,
@@ -177,6 +262,16 @@ def _fetch_page(client: httpx.Client, url: str) -> _FetchedPage:
     response = client.get(url)
     response.raise_for_status()
     content_type = response.headers.get("content-type", "")
+    logger.info(
+        "Restaurant menu page response received",
+        extra={
+            "request_url": url,
+            "resolved_url": str(response.url),
+            "status_code": response.status_code,
+            "content_type": content_type,
+            "content_length": len(response.content),
+        },
+    )
     if "application/pdf" in content_type or str(response.url).lower().endswith(".pdf"):
         return _FetchedPage(str(response.url), _extract_pdf_text(response.content), [])
     if "text/html" not in content_type and "application/xhtml" not in content_type:
@@ -195,6 +290,20 @@ def _extract_pdf_text(content: bytes) -> str:
     reader = PdfReader(BytesIO(content))
     parts = [page.extract_text() or "" for page in reader.pages[:8]]
     return _clean_text("\n".join(parts))
+
+
+def _http_error_message(exc: httpx.HTTPError, url: str) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        reason = exc.response.reason_phrase
+        message = f"HTTP {status_code} {reason} for {exc.request.url}"
+        if status_code == 403:
+            return (
+                f"{message}. The menu or ordering provider is blocking server-side "
+                "fetches, so Command Center cannot read that URL directly."
+            )
+        return message
+    return f"{exc.__class__.__name__} for {url}: {exc}"
 
 
 def _menu_candidate_urls(base_url: str, links: list[tuple[str, str]]) -> list[str]:
@@ -342,7 +451,9 @@ def menu_cache_payload(restaurant: Restaurant) -> dict[str, Any] | None:
         "source_url": cache.source_url,
         "fetched_at": cache.fetched_at.isoformat() if cache.fetched_at else None,
         "error_message": cache.error_message,
-        "summary": (cache.structured_json or {}).get("summary"),
+        "summary": cache.error_message
+        if cache.status == "failed" and cache.error_message
+        else (cache.structured_json or {}).get("summary"),
         "item_count": len((cache.structured_json or {}).get("items") or []),
     }
 

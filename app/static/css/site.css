@@ -1388,13 +1388,23 @@ td form {
 }
 
 .restaurant-menu-cache span,
-.restaurant-menu-cache p {
+.restaurant-menu-cache p,
+.restaurant-menu-cache small {
   color: var(--muted);
   font-size: 0.88rem;
 }
 
 .restaurant-menu-cache p {
   margin: 0;
+}
+
+.restaurant-menu-cache small {
+  overflow-wrap: anywhere;
+}
+
+.restaurant-menu-cache small a {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .restaurant-menu-cache button {

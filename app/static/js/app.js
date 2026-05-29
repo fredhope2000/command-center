@@ -607,6 +607,9 @@ function renderRestaurantMenuCache(restaurant) {
     : cache?.error_message
       ? `<p>${escapeHtml(cache.error_message)}</p>`
       : "";
+  const source = cache?.source_url
+    ? `<small>Source: <a href="${escapeHtml(cache.source_url)}" target="_blank" rel="noreferrer">${escapeHtml(cache.source_url)}</a></small>`
+    : "";
 
   return `
     <section class="restaurant-menu-cache">
@@ -615,6 +618,7 @@ function renderRestaurantMenuCache(restaurant) {
         <span data-restaurant-menu-status>${escapeHtml(statusText)}</span>
       </div>
       ${summary}
+      ${source}
       <button class="ghost" type="button" data-refresh-restaurant-menu="${restaurant.id}" ${isFetching ? "disabled" : ""}>${isFetching ? "Fetching..." : "Fetch/Update Menu"}</button>
     </section>
   `;
