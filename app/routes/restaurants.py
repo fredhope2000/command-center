@@ -31,6 +31,7 @@ from app.services.restaurant_menus import (
     refresh_menu_for_restaurant,
     search_restaurant_menus,
 )
+from app.services.restaurant_qa import answer_restaurant_question
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 
@@ -166,6 +167,20 @@ async def restaurant_menu_search(request: Request, db: Session = Depends(get_db)
 
     restaurants = db.scalars(select(Restaurant).order_by(Restaurant.name.asc())).all()
     return {"results": search_restaurant_menus(restaurants, query)}
+
+
+@router.post("/ask")
+async def ask_restaurants(request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    question = _clean(payload.get("question"))
+    if question is None:
+        return JSONResponse({"error": "Question is required."}, status_code=400)
+
+    restaurants = db.scalars(select(Restaurant).order_by(Restaurant.name.asc())).all()
+    try:
+        return answer_restaurant_question(restaurants, question)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 @router.post("/")

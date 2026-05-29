@@ -1659,6 +1659,128 @@ td form {
   white-space: pre-wrap;
 }
 
+.restaurant-ask-overlay {
+  align-items: center;
+  background: rgba(30, 32, 28, 0.68);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  padding: 28px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 20;
+}
+
+.restaurant-ask-frame {
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(15, 39, 66, 0.35);
+  display: grid;
+  gap: 14px;
+  max-height: calc(100vh - 56px);
+  max-width: min(680px, calc(100vw - 56px));
+  overflow: auto;
+  padding: 16px;
+  width: min(680px, calc(100vw - 56px));
+}
+
+.restaurant-ask-heading {
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-bottom: 10px;
+}
+
+.restaurant-ask-heading strong,
+.restaurant-ask-heading span {
+  display: block;
+}
+
+.restaurant-ask-heading span,
+.restaurant-ask-answer small,
+.restaurant-ask-result span,
+.restaurant-ask-result li {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.restaurant-ask-close {
+  align-items: center;
+  border-radius: 999px;
+  display: flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+
+.restaurant-ask-form {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.restaurant-ask-form textarea {
+  min-height: 92px;
+}
+
+.restaurant-ask-form button {
+  justify-self: start;
+}
+
+.restaurant-ask-response {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.restaurant-ask-response[hidden] {
+  display: none;
+}
+
+.restaurant-ask-answer p,
+.restaurant-ask-error {
+  margin: 0;
+}
+
+.restaurant-ask-error {
+  color: #a43f18;
+  font-weight: 700;
+}
+
+.restaurant-ask-results {
+  display: grid;
+  gap: 8px;
+}
+
+.restaurant-ask-result {
+  align-items: stretch;
+  background: #f8faf7;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  display: grid;
+  gap: 4px;
+  justify-content: stretch;
+  padding: 10px;
+  text-align: left;
+}
+
+.restaurant-ask-result:hover {
+  background: #eef3ef;
+}
+
+.restaurant-ask-result ul {
+  display: grid;
+  gap: 3px;
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
 .restaurant-detail-actions {
   align-items: center;
   border-top: 1px solid var(--line);

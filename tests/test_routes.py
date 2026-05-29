@@ -572,6 +572,7 @@ def test_restaurant_map_renders_without_google_config(client: TestClient) -> Non
     assert "Google Maps is not configured" in response.text
     assert "data-restaurant-rating-filter" in response.text
     assert "data-restaurant-menu-search" in response.text
+    assert "data-open-restaurant-ask" in response.text
     assert "0 of 0 items shown" in response.text
     assert "0 saved" not in response.text
 
@@ -728,6 +729,57 @@ def test_restaurant_menu_search_uses_cached_menu_data(client: TestClient) -> Non
     assert "smoky" in results[0]["matched_terms"]
     assert "Smoky grilled vegetables" in results[0]["reason"]
     assert results[0]["evidence"][0]["name"] == "Smoky grilled vegetables"
+
+
+def test_restaurant_ask_uses_saved_restaurant_data(client: TestClient) -> None:
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "ask-place-1",
+            "name": "Pasta Date",
+            "latitude": 37.77,
+            "longitude": -122.42,
+            "status": "visited",
+            "category": "casual_dates",
+            "cuisine": "Italian",
+            "tags": "pasta, date night",
+            "neighborhood": "Mission",
+            "personal_rating": "5",
+            "notes": "Order the rigatoni.",
+        },
+    )
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "ask-place-2",
+            "name": "Dessert Stop",
+            "latitude": 37.78,
+            "longitude": -122.43,
+            "category": "dessert",
+            "tags": "cake",
+        },
+    )
+
+    response = client.post(
+        "/restaurants/ask",
+        json={"question": "Where should we go for a casual date with pasta?"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["source"] == "local"
+    assert "Pasta Date" in payload["answer"]
+    assert payload["results"][0]["restaurant_id"] == 1
+    assert payload["results"][0]["name"] == "Pasta Date"
+    assert "casual" in payload["results"][0]["reason"]
+    assert "Order the rigatoni" in payload["results"][0]["evidence"][0]
+
+
+def test_restaurant_ask_requires_question(client: TestClient) -> None:
+    response = client.post("/restaurants/ask", json={"question": ""})
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "Question is required."
 
 
 def test_restaurant_menu_ai_text_is_chunked_without_truncating() -> None:

@@ -406,6 +406,7 @@ const restaurantState = {
     query: "",
     resultsById: new Map(),
   },
+  askInFlight: false,
   autosave: {
     timer: null,
     pendingForm: null,
@@ -830,6 +831,147 @@ function updateRestaurantMenuSearchState(shell) {
   const count = restaurantState.menuSearch.resultsById.size;
   status.hidden = false;
   status.textContent = `${count} ${count === 1 ? "match" : "matches"} for ${restaurantState.menuSearch.query}`;
+}
+
+function showRestaurantAskOverlay() {
+  closeRestaurantAskOverlay();
+  const overlay = document.createElement("div");
+  overlay.className = "restaurant-ask-overlay";
+  overlay.dataset.restaurantAskOverlay = "";
+  overlay.innerHTML = `
+    <div class="restaurant-ask-frame">
+      <div class="restaurant-ask-heading">
+        <div>
+          <strong>Ask Restaurants</strong>
+          <span>Answers use saved restaurant notes, fields, and cached menu data.</span>
+        </div>
+        <button type="button" class="restaurant-ask-close" aria-label="Close">×</button>
+      </div>
+      <form class="restaurant-ask-form" data-restaurant-ask-form>
+        <textarea name="question" rows="3" placeholder="Where should we go for a casual date with good pasta?"></textarea>
+        <button type="submit">Ask</button>
+      </form>
+      <div class="restaurant-ask-response" data-restaurant-ask-response hidden></div>
+    </div>
+  `;
+  overlay.addEventListener("click", (event) => {
+    const resultButton = event.target.closest("[data-restaurant-ask-result]");
+    if (resultButton) {
+      const restaurantId = Number(resultButton.dataset.restaurantAskResult);
+      if (restaurantId) {
+        closeRestaurantAskOverlay();
+        selectRestaurant(restaurantId);
+      }
+      return;
+    }
+    if (
+      event.target === overlay ||
+      event.target.closest(".restaurant-ask-close")
+    ) {
+      closeRestaurantAskOverlay();
+    }
+  });
+  overlay
+    .querySelector("[data-restaurant-ask-form]")
+    ?.addEventListener("submit", askRestaurants);
+  overlay
+    .querySelector('textarea[name="question"]')
+    ?.addEventListener("keydown", submitRestaurantAskOnEnter);
+  document.body.append(overlay);
+  window.setTimeout(() => {
+    overlay.querySelector('textarea[name="question"]')?.focus();
+  }, 0);
+}
+
+function closeRestaurantAskOverlay() {
+  document.querySelector("[data-restaurant-ask-overlay]")?.remove();
+}
+
+async function askRestaurants(event) {
+  event.preventDefault();
+  if (restaurantState.askInFlight) {
+    return;
+  }
+  const form = event.currentTarget;
+  const question = form.querySelector('textarea[name="question"]')?.value.trim() || "";
+  const submitButton = form.querySelector('button[type="submit"]');
+  const responseEl = form
+    .closest("[data-restaurant-ask-overlay]")
+    ?.querySelector("[data-restaurant-ask-response]");
+  if (!question || !responseEl || !submitButton) {
+    return;
+  }
+
+  restaurantState.askInFlight = true;
+  submitButton.disabled = true;
+  submitButton.textContent = "Asking...";
+  responseEl.hidden = false;
+  responseEl.innerHTML = `<p class="empty">Checking saved restaurants...</p>`;
+
+  try {
+    const response = await fetch("/restaurants/ask", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ question }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not answer that question.");
+    }
+    renderRestaurantAskResponse(responseEl, payload);
+  } catch (error) {
+    responseEl.innerHTML = `<p class="restaurant-ask-error">${escapeHtml(error.message || "Could not answer that question.")}</p>`;
+  } finally {
+    restaurantState.askInFlight = false;
+    submitButton.disabled = false;
+    submitButton.textContent = "Ask";
+  }
+}
+
+function submitRestaurantAskOnEnter(event) {
+  if (event.key !== "Enter" || event.shiftKey) {
+    return;
+  }
+  event.preventDefault();
+  event.currentTarget.closest("form")?.requestSubmit();
+}
+
+function renderRestaurantAskResponse(container, payload) {
+  const results = payload.results || [];
+  container.innerHTML = `
+    <div class="restaurant-ask-answer">
+      <p>${escapeHtml(payload.answer || "No answer returned.")}</p>
+      <small>${payload.source === "ai" ? "Answered with AI using saved database context." : "Answered with local saved-data matching."}</small>
+    </div>
+    <div class="restaurant-ask-results">
+      ${
+        results.length
+          ? results
+              .map(
+                (result) => `
+                  <button type="button" class="restaurant-ask-result" data-restaurant-ask-result="${escapeHtml(result.restaurant_id)}">
+                    <strong>${escapeHtml(result.name || "Restaurant")}</strong>
+                    ${result.reason ? `<span>${escapeHtml(result.reason)}</span>` : ""}
+                    ${renderRestaurantAskEvidence(result.evidence || [])}
+                  </button>
+                `,
+              )
+              .join("")
+          : `<p class="empty">No saved restaurant matches found.</p>`
+      }
+    </div>
+  `;
+}
+
+function renderRestaurantAskEvidence(evidence) {
+  const items = evidence.filter(Boolean).slice(0, 3);
+  if (!items.length) {
+    return "";
+  }
+  return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
 function selectRestaurant(restaurantId) {
@@ -1804,6 +1946,9 @@ function wireRestaurantMap() {
       event.stopPropagation();
       showRestaurantAddSearch(shell);
     });
+  shell
+    .querySelector("[data-open-restaurant-ask]")
+    ?.addEventListener("click", showRestaurantAskOverlay);
   shell
     .querySelector("[data-restaurant-menu-search]")
     ?.addEventListener("submit", searchRestaurantMenus);
