@@ -396,6 +396,7 @@ const restaurantState = {
   googleReady: false,
   restaurants: [],
   markers: new Map(),
+  menuFetches: new Set(),
   selectedId: null,
 };
 
@@ -584,6 +585,112 @@ function renderRestaurantPhotos(restaurant) {
   `;
 }
 
+function renderRestaurantMenuCache(restaurant) {
+  const cache = restaurant.menu_cache;
+  const isFetching = restaurantState.menuFetches.has(restaurant.id);
+  const fetchedAt = cache?.fetched_at
+    ? new Date(cache.fetched_at).toLocaleDateString()
+    : null;
+  const statusText = isFetching
+    ? "Fetching menu..."
+    : cache
+    ? [
+        cache.status ? cache.status.replaceAll("_", " ") : "unknown",
+        fetchedAt ? `updated ${fetchedAt}` : "",
+        cache.item_count ? `${cache.item_count} items` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "No cached menu";
+  const summary = cache?.summary
+    ? `<p>${escapeHtml(cache.summary)}</p>`
+    : cache?.error_message
+      ? `<p>${escapeHtml(cache.error_message)}</p>`
+      : "";
+
+  return `
+    <section class="restaurant-menu-cache">
+      <div>
+        <strong>Menu cache</strong>
+        <span data-restaurant-menu-status>${escapeHtml(statusText)}</span>
+      </div>
+      ${summary}
+      <button class="ghost" type="button" data-refresh-restaurant-menu="${restaurant.id}" ${isFetching ? "disabled" : ""}>${isFetching ? "Fetching..." : "Fetch/Update Menu"}</button>
+    </section>
+  `;
+}
+
+function renderRestaurantMenuSearchResults(shell, results, query) {
+  const container = shell.querySelector("[data-restaurant-menu-results]");
+  if (!container) {
+    return;
+  }
+  container.hidden = false;
+  container.innerHTML = "";
+  if (!results.length) {
+    const empty = document.createElement("span");
+    empty.className = "empty";
+    empty.textContent = query
+      ? "No cached menus match."
+      : "Enter a craving to search cached menus.";
+    container.append(empty);
+    return;
+  }
+
+  results.forEach((result) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "restaurant-menu-result";
+    button.innerHTML = `
+      <strong>${escapeHtml(result.name || "Restaurant")}</strong>
+      <span>${escapeHtml(result.reason || "Cached menu match.")}</span>
+    `;
+    button.addEventListener("click", () => {
+      selectRestaurant(Number(result.restaurant_id));
+    });
+    container.append(button);
+  });
+}
+
+async function searchRestaurantMenus(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const shell = form.closest("[data-restaurant-map]");
+  const input = form.querySelector('input[name="query"]');
+  const query = input?.value.trim() || "";
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (!shell) {
+    return;
+  }
+  if (!query) {
+    renderRestaurantMenuSearchResults(shell, [], query);
+    return;
+  }
+
+  if (submitButton) {
+    submitButton.disabled = true;
+  }
+  try {
+    const response = await fetch("/restaurants/menu/search", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not search menus.");
+    }
+    renderRestaurantMenuSearchResults(shell, payload.results || [], query);
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+    }
+  }
+}
+
 function selectRestaurant(restaurantId) {
   restaurantState.selectedId = restaurantId;
   const restaurant = restaurantState.restaurants.find(
@@ -700,6 +807,7 @@ function selectRestaurant(restaurantId) {
         <textarea name="notes" rows="5" placeholder="What to order, who recommended it, visit notes">${escapeHtml(restaurant.notes)}</textarea>
       </label>
     </form>
+    ${renderRestaurantMenuCache(restaurant)}
     ${renderRestaurantPhotos(restaurant)}
     <div class="restaurant-detail-actions">
       <button form="restaurant-detail-form-${restaurant.id}" type="submit">Save</button>
@@ -731,12 +839,43 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector("[data-restaurant-photo-upload] input")
     ?.addEventListener("change", uploadRestaurantPhoto);
+  panel
+    .querySelector("[data-refresh-restaurant-menu]")
+    ?.addEventListener("click", refreshRestaurantMenu);
   panel.addEventListener("click", handleRestaurantPhotoPreviewClick);
   panel.addEventListener("click", handleRestaurantPhotoDeleteClick);
   wireConfirmDeleteForms();
   panel
     .querySelector(".restaurant-delete-form")
     ?.addEventListener("submit", deleteRestaurantDetailForm);
+}
+
+async function refreshRestaurantMenu(event) {
+  const button = event.currentTarget;
+  const restaurantId = Number(button.dataset.refreshRestaurantMenu);
+  if (!restaurantId) {
+    return;
+  }
+  restaurantState.menuFetches.add(restaurantId);
+  button.disabled = true;
+  button.textContent = "Fetching...";
+  try {
+    const response = await fetch(`/restaurants/${restaurantId}/menu/refresh`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not fetch menu.");
+    }
+    updateRestaurantFromPayload(payload.restaurant);
+    selectRestaurant(payload.restaurant.id);
+  } finally {
+    restaurantState.menuFetches.delete(restaurantId);
+    if (restaurantState.selectedId === restaurantId) {
+      selectRestaurant(restaurantId);
+    }
+  }
 }
 
 function handleRestaurantPhotoPreviewClick(event) {
@@ -1232,6 +1371,9 @@ function wireRestaurantMap() {
       event.stopPropagation();
       showRestaurantAddSearch(shell);
     });
+  shell
+    .querySelector("[data-restaurant-menu-search]")
+    ?.addEventListener("submit", searchRestaurantMenus);
   shell
     .querySelector("[data-collapse-restaurant-controls]")
     ?.addEventListener("click", () => setRestaurantControlsCollapsed(shell, true));

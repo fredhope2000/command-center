@@ -119,6 +119,24 @@ def test_restaurant_photo_storage_defaults_follow_environment(
     assert config.settings.restaurant_photos_s3_prefix == "ec2/command-center"
 
 
+def test_restaurant_ai_is_enabled_only_in_production_with_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    config = _reload_config()
+    assert config.settings.restaurant_ai_enabled is False
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    config = _reload_config()
+    assert config.settings.restaurant_ai_enabled is False
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    config = _reload_config()
+    assert config.settings.restaurant_ai_enabled is True
+
+
 def test_dashboard_renders(client: TestClient) -> None:
     response = client.get("/")
 
@@ -553,6 +571,7 @@ def test_restaurant_map_renders_without_google_config(client: TestClient) -> Non
     assert "Restaurants" in response.text
     assert "Google Maps is not configured" in response.text
     assert "data-restaurant-rating-filter" in response.text
+    assert "data-restaurant-menu-search" in response.text
     assert "0 of 0 items shown" in response.text
     assert "0 saved" not in response.text
 
@@ -644,6 +663,57 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
     assert clear_name_response.json()["name"] == "Test Bistro"
     assert clear_name_response.json()["google_name"] == "Test Bistro"
     assert clear_name_response.json()["custom_name"] is None
+
+
+def test_restaurant_menu_refresh_uses_dev_mock_cache(client: TestClient) -> None:
+    create_response = client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "menu-place-1",
+            "name": "Menu Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+            "website_uri": "https://example.test",
+            "cuisine": "Noodles",
+            "tags": "smoky, casual",
+        },
+    )
+    assert create_response.status_code == 201
+    assert create_response.json()["menu_cache"] is None
+
+    refresh_response = client.post("/restaurants/1/menu/refresh")
+
+    assert refresh_response.status_code == 200
+    restaurant = refresh_response.json()["restaurant"]
+    assert restaurant["menu_cache"]["status"] == "mocked"
+    assert restaurant["menu_cache"]["item_count"] == 2
+    assert restaurant["menu_cache"]["summary"] == (
+        "Development mock menu generated without AI."
+    )
+
+    data_response = client.get("/restaurants/data")
+    assert data_response.json()["restaurants"][0]["menu_cache"]["status"] == "mocked"
+
+
+def test_restaurant_menu_search_uses_cached_menu_data(client: TestClient) -> None:
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "search-menu-place-1",
+            "name": "Search Menu Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    client.post("/restaurants/1/menu/refresh")
+
+    response = client.post("/restaurants/menu/search", json={"query": "smoky"})
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["restaurant_id"] == 1
+    assert results[0]["name"] == "Search Menu Cafe"
+    assert "smoky" in results[0]["matched_terms"]
 
 
 def test_restaurant_photos_can_be_uploaded_and_removed(

@@ -3,7 +3,18 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import StrEnum
 
-from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -178,6 +189,35 @@ class Restaurant(Base):
         cascade="all, delete-orphan",
         order_by="RestaurantPhoto.created_at",
     )
+    menu_cache: Mapped["RestaurantMenuCache | None"] = relationship(
+        back_populates="restaurant",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+
+class RestaurantMenuCache(Base):
+    __tablename__ = "restaurant_menu_caches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    restaurant_id: Mapped[int] = mapped_column(
+        ForeignKey("restaurants.id"), nullable=False, unique=True, index=True
+    )
+    source_url: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    structured_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="not_fetched")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    restaurant: Mapped[Restaurant] = relationship(back_populates="menu_cache")
 
 
 class RestaurantPhoto(Base):

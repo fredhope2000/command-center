@@ -20,6 +20,12 @@ from app.services.restaurant_photos import (
     delete_restaurant_photo,
     upload_restaurant_photo,
 )
+from app.services.restaurant_menus import (
+    apply_menu_result,
+    menu_cache_payload,
+    refresh_menu_for_restaurant,
+    search_restaurant_menus,
+)
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 
@@ -67,6 +73,7 @@ def _restaurant_payload(restaurant: Restaurant) -> dict[str, Any]:
         "personal_rating": restaurant.personal_rating,
         "price_level": restaurant.price_level,
         "notes": restaurant.notes,
+        "menu_cache": menu_cache_payload(restaurant),
         "photos": [_restaurant_photo_payload(photo) for photo in restaurant.photos],
     }
 
@@ -142,6 +149,17 @@ def restaurant_data(db: Session = Depends(get_db)):
         "statuses": _status_options(),
         "categories": _category_options(),
     }
+
+
+@router.post("/menu/search")
+async def restaurant_menu_search(request: Request, db: Session = Depends(get_db)):
+    payload = await request.json()
+    query = _clean(payload.get("query"))
+    if query is None:
+        return JSONResponse({"error": "Search query is required."}, status_code=400)
+
+    restaurants = db.scalars(select(Restaurant).order_by(Restaurant.name.asc())).all()
+    return {"results": search_restaurant_menus(restaurants, query)}
 
 
 @router.post("/")
@@ -306,3 +324,24 @@ def remove_restaurant_photo(
             "restaurant": _restaurant_payload(restaurant) if restaurant else None,
         }
     )
+
+
+@router.post("/{restaurant_id}/menu/refresh")
+def refresh_restaurant_menu(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    restaurant = db.get(Restaurant, restaurant_id)
+    if restaurant is None:
+        return JSONResponse({"error": "Restaurant not found."}, status_code=404)
+
+    try:
+        result = refresh_menu_for_restaurant(restaurant)
+    except (RuntimeError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+    apply_menu_result(restaurant, result)
+    db.add(restaurant)
+    db.commit()
+    db.refresh(restaurant)
+    return JSONResponse({"restaurant": _restaurant_payload(restaurant)})

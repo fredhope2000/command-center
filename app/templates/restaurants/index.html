@@ -24,6 +24,15 @@
         </div>
       {% endif %}
 
+      <form class="restaurant-craving-search" data-restaurant-menu-search>
+        <label>
+          Craving
+          <input name="query" placeholder="Smoky, crispy, bright, comforting">
+        </label>
+        <button type="submit">Find</button>
+        <div class="restaurant-menu-results" data-restaurant-menu-results hidden></div>
+      </form>
+
       <div class="restaurant-filters" data-restaurant-filters>
         <label>
           Search saved

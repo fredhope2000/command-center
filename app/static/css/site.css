@@ -1103,7 +1103,7 @@ td form {
   align-self: stretch;
   display: grid;
   gap: 16px;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   transition: opacity 0.12s ease, transform 0.18s ease;
@@ -1137,6 +1137,52 @@ td form {
   font-size: 0.9rem;
   line-height: 1.1;
   margin: -2px 0 -8px;
+}
+
+.restaurant-craving-search {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-top: 14px;
+}
+
+.restaurant-craving-search button {
+  justify-self: start;
+}
+
+.restaurant-menu-results {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.restaurant-menu-results[hidden] {
+  display: none;
+}
+
+.restaurant-menu-result {
+  background: #f8faf7;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  text-align: left;
+}
+
+.restaurant-menu-result strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.restaurant-menu-result span {
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 .restaurant-list {
@@ -1322,6 +1368,37 @@ td form {
 .restaurant-detail-form {
   display: grid;
   gap: 12px;
+}
+
+.restaurant-menu-cache {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+}
+
+.restaurant-menu-cache div {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.restaurant-menu-cache span,
+.restaurant-menu-cache p {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.restaurant-menu-cache p {
+  margin: 0;
+}
+
+.restaurant-menu-cache button {
+  justify-self: start;
 }
 
 .restaurant-detail-actions {

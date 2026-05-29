@@ -30,10 +30,18 @@ class Settings:
     ).strip().lower() in {"1", "true", "yes", "on"}
     password_hash: str = os.getenv("COMMAND_CENTER_PASSWORD_HASH", "")
     auth_secret: str = os.getenv("COMMAND_CENTER_AUTH_SECRET", "")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_restaurant_model: str = os.getenv(
+        "OPENAI_RESTAURANT_MODEL", "gpt-5.4-nano"
+    )
 
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def restaurant_ai_enabled(self) -> bool:
+        return self.is_production and bool(self.openai_api_key)
 
 
 settings = Settings()
