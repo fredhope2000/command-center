@@ -1968,11 +1968,11 @@ td form {
   }
 
   .restaurant-control-panel {
-    max-height: 680px;
+    max-height: none;
   }
 
   .restaurant-list {
-    min-height: 260px;
+    min-height: clamp(420px, 58vh, 640px);
   }
 
   .restaurant-map-shell.is-controls-collapsed {
