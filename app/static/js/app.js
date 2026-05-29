@@ -655,6 +655,7 @@ function renderRestaurantMenuCache(restaurant) {
       ${source}
       <div class="restaurant-menu-cache-actions">
         <button class="ghost" type="button" data-refresh-restaurant-menu="${restaurant.id}" ${isFetching || isPending ? "disabled" : ""}>${isFetching ? "Fetching..." : isPending ? "Parsing..." : "Fetch/Update Menu"}</button>
+        ${isPending ? `<button class="ghost" type="button" data-cancel-restaurant-menu-parse="${restaurant.id}">Cancel Parsing</button>` : ""}
         ${viewButton}
       </div>
       <form class="restaurant-menu-import" data-restaurant-menu-import="${restaurant.id}">
@@ -924,6 +925,9 @@ function selectRestaurant(restaurantId) {
     .querySelector("[data-view-restaurant-menu]")
     ?.addEventListener("click", viewRestaurantMenuData);
   panel
+    .querySelector("[data-cancel-restaurant-menu-parse]")
+    ?.addEventListener("click", cancelRestaurantMenuParsing);
+  panel
     .querySelector("[data-restaurant-menu-import]")
     ?.addEventListener("submit", importRestaurantMenuText);
   panel.addEventListener("click", handleRestaurantPhotoPreviewClick);
@@ -971,6 +975,29 @@ async function importRestaurantMenuText(event) {
     if (restaurantState.selectedId === restaurantId) {
       selectRestaurant(restaurantId);
     }
+  }
+}
+
+async function cancelRestaurantMenuParsing(event) {
+  const button = event.currentTarget;
+  const restaurantId = Number(button.dataset.cancelRestaurantMenuParse);
+  if (!restaurantId) {
+    return;
+  }
+  button.disabled = true;
+  try {
+    const response = await fetch(`/restaurants/${restaurantId}/menu/parse/cancel`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not cancel menu parsing.");
+    }
+    updateRestaurantFromPayload(payload.restaurant);
+    selectRestaurant(payload.restaurant.id);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -1024,7 +1051,6 @@ function showRestaurantMenuDataOverlay(payload) {
             ${
               items.length
                 ? items
-                    .slice(0, 80)
                     .map(
                       (item) => `
                         <article>

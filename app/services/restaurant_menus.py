@@ -24,9 +24,10 @@ logger = logging.getLogger(__name__)
 MAX_MENU_PAGES = 6
 MAX_EXTRACTED_TEXT = 120_000
 MAX_IMPORT_TEXT = 250_000
-MAX_AI_MENU_TEXT = 45_000
-MAX_AI_OUTPUT_TOKENS = 4_000
-OPENAI_TIMEOUT_SECONDS = 24.0
+MAX_AI_CHUNK_TEXT = 22_000
+AI_CHUNK_OVERLAP = 1_500
+MAX_AI_OUTPUT_TOKENS = 12_000
+OPENAI_TIMEOUT_SECONDS = 90.0
 MENU_PENDING_TIMEOUT_SECONDS = 10 * 60
 REQUEST_TIMEOUT = 8.0
 MENU_LINK_RE = re.compile(r"\b(menu|food|dinner|lunch|brunch|breakfast)\b", re.I)
@@ -440,25 +441,103 @@ def _structure_menu_with_openai(restaurant: Restaurant, text: str) -> dict[str, 
         api_key=settings.openai_api_key,
         timeout=OPENAI_TIMEOUT_SECONDS,
     )
-    ai_text = _prepare_menu_text_for_ai(text)
+    chunks = _chunk_menu_text_for_ai(text)
+    structured_chunks = [
+        _structure_menu_chunk_with_openai(
+            client,
+            restaurant,
+            chunk,
+            chunk_index=index,
+            chunk_count=len(chunks),
+        )
+        for index, chunk in enumerate(chunks, start=1)
+    ]
+    return _merge_structured_menu_chunks(structured_chunks)
+
+
+def _structure_menu_chunk_with_openai(
+    client: Any,
+    restaurant: Restaurant,
+    ai_text: str,
+    chunk_index: int,
+    chunk_count: int,
+) -> dict[str, Any]:
     prompt = {
         "restaurant": restaurant.custom_name or restaurant.name,
         "instructions": (
-            "Extract menu intelligence for restaurant flavor search. Return only JSON "
-            "with keys summary and items. Each item must have name, description, "
-            "category, flavor_tags, dietary_tags, confidence. Do not invent dishes."
+            "Extract menu intelligence from this menu text chunk for restaurant "
+            "flavor search. Return compact "
+            "strict JSON with keys summary and items. Each item must have name, "
+            "description, category, flavor_tags, dietary_tags, confidence. Keep "
+            "descriptions concise. Include every real menu item visible in this chunk, "
+            "including entrees, sides, drinks, desserts, add-ons, modifiers, and "
+            "items near the end of the chunk. "
+            "but do not invent dishes. If the text is duplicated, deduplicate within "
+            "this chunk."
         ),
+        "chunk": chunk_index,
+        "chunk_count": chunk_count,
         "menu_text": ai_text,
     }
     response = client.responses.create(
         model=settings.openai_restaurant_model,
         input=json.dumps(prompt),
         max_output_tokens=MAX_AI_OUTPUT_TOKENS,
+        text={"format": {"type": "json_object"}},
     )
     parsed = _parse_json_output(getattr(response, "output_text", ""))
     if not isinstance(parsed, dict) or not isinstance(parsed.get("items"), list):
         raise ValueError("OpenAI returned an unexpected menu JSON shape.")
     return parsed
+
+
+def _chunk_menu_text_for_ai(text: str) -> list[str]:
+    prepared = _prepare_menu_text_for_ai(text)
+    if len(prepared) <= MAX_AI_CHUNK_TEXT:
+        return [prepared]
+    if "\n" not in prepared:
+        return _chunk_long_text(prepared)
+    chunks: list[str] = []
+    current: list[str] = []
+    current_size = 0
+    for line in prepared.splitlines():
+        line_size = len(line) + 1
+        if line_size > MAX_AI_CHUNK_TEXT:
+            if current:
+                chunks.append("\n".join(current))
+                current = []
+                current_size = 0
+            chunks.extend(_chunk_long_text(line))
+            continue
+        if current and current_size + line_size > MAX_AI_CHUNK_TEXT:
+            chunks.append("\n".join(current))
+            current = []
+            current_size = 0
+        current.append(line)
+        current_size += line_size
+    if current:
+        chunks.append("\n".join(current))
+    return chunks or [prepared[:MAX_AI_CHUNK_TEXT]]
+
+
+def _chunk_long_text(text: str) -> list[str]:
+    chunks: list[str] = []
+    start = 0
+    while start < len(text):
+        end = min(start + MAX_AI_CHUNK_TEXT, len(text))
+        if end < len(text):
+            boundary = max(
+                text.rfind(". ", start, end),
+                text.rfind(" | ", start, end),
+                text.rfind("  ", start, end),
+            )
+            if boundary > start + (MAX_AI_CHUNK_TEXT // 2):
+                end = boundary + 1
+        chunks.append(text[start:end].strip())
+        if end >= len(text):
+            break
+        start = max(end - AI_CHUNK_OVERLAP, 0)
+    return [chunk for chunk in chunks if chunk]
 
 
 def _prepare_menu_text_for_ai(text: str) -> str:
@@ -470,11 +549,72 @@ def _prepare_menu_text_for_ai(text: str) -> str:
             continue
         seen.add(clean_line)
         lines.append(clean_line)
-        if sum(len(item) for item in lines) >= MAX_AI_MENU_TEXT:
-            break
     if not lines:
-        return text[:MAX_AI_MENU_TEXT]
-    return "\n".join(lines)[:MAX_AI_MENU_TEXT]
+        return text
+    return "\n".join(lines)
+
+
+def _merge_structured_menu_chunks(chunks: list[dict[str, Any]]) -> dict[str, Any]:
+    merged_items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    summaries: list[str] = []
+    for chunk in chunks:
+        summary = str(chunk.get("summary") or "").strip()
+        if summary:
+            summaries.append(summary)
+        for item in chunk.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            name = _clean_text(str(item.get("name") or ""))
+            if not name:
+                continue
+            key = _menu_item_dedupe_key(name)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged_items.append(item)
+    return {
+        "summary": _merge_menu_summaries(summaries) or "Menu parsed from cached text.",
+        "items": merged_items,
+    }
+
+
+def _merge_menu_summaries(summaries: list[str]) -> str:
+    sentences: list[str] = []
+    seen: set[str] = set()
+    for summary in summaries:
+        for sentence in re.split(r"(?<=[.!?])\s+", summary):
+            clean_sentence = _clean_text(sentence)
+            if not clean_sentence:
+                continue
+            key = re.sub(r"[^a-z0-9]+", " ", clean_sentence.lower()).strip()
+            if key in seen:
+                continue
+            seen.add(key)
+            sentences.append(clean_sentence)
+            if len(" ".join(sentences)) >= 700:
+                return " ".join(sentences)[:700].rstrip()
+    return " ".join(sentences)[:700].rstrip()
+
+
+def _menu_item_dedupe_key(name: str) -> str:
+    normalized = _clean_text(name).lower()
+    normalized = re.sub(r"\([^)]*\)", "", normalized)
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    stopwords = {
+        "a",
+        "an",
+        "and",
+        "the",
+        "with",
+        "w",
+        "choice",
+        "of",
+        "add",
+        "extra",
+    }
+    tokens = [token for token in normalized.split() if token not in stopwords]
+    return " ".join(tokens)
 
 
 def _clean_text(text: str) -> str:
@@ -495,6 +635,7 @@ def menu_cache_payload(restaurant: Restaurant) -> dict[str, Any] | None:
         else (cache.structured_json or {}).get("summary"),
         "item_count": len((cache.structured_json or {}).get("items") or []),
         "has_data": bool(cache.extracted_text),
+        "has_pending_data": bool(cache.pending_extracted_text),
     }
 
 
@@ -505,6 +646,21 @@ def apply_menu_result(restaurant: Restaurant, result: MenuFetchResult) -> None:
     now = datetime.utcnow()
     if cache is None:
         cache = RestaurantMenuCache(restaurant=restaurant)
+    if result.status.endswith("_pending"):
+        cache.pending_source_url = result.source_url
+        cache.pending_extracted_text = result.extracted_text
+        cache.pending_content_hash = result.content_hash if result.extracted_text else None
+        cache.status = result.status
+        cache.error_message = None
+        if not cache.extracted_text:
+            cache.source_url = result.source_url
+            cache.extracted_text = result.extracted_text
+            cache.structured_json = result.structured_json
+            cache.content_hash = result.content_hash if result.extracted_text else None
+            cache.fetched_at = now
+        cache.updated_at = now
+        restaurant.menu_cache = cache
+        return
     if result.status == "failed" and cache.extracted_text:
         cache.status = result.status
         cache.error_message = result.error_message
@@ -523,6 +679,9 @@ def apply_menu_result(restaurant: Restaurant, result: MenuFetchResult) -> None:
         cache.last_success_status = result.status
         cache.last_success_source_url = result.source_url
         cache.last_success_at = now
+        cache.pending_source_url = None
+        cache.pending_extracted_text = None
+        cache.pending_content_hash = None
     cache.updated_at = now
     restaurant.menu_cache = cache
 
@@ -542,7 +701,9 @@ def _structure_menu_background(restaurant_id: int, success_status: str) -> None:
         if restaurant is None or restaurant.menu_cache is None:
             return
         cache = restaurant.menu_cache
-        text = cache.extracted_text or ""
+        starting_status = cache.status
+        starting_hash = cache.pending_content_hash
+        text = cache.pending_extracted_text or cache.extracted_text or ""
         if not text:
             cache.status = "failed"
             cache.error_message = "No menu text was available for AI parsing."
@@ -550,9 +711,8 @@ def _structure_menu_background(restaurant_id: int, success_status: str) -> None:
             return
         try:
             structured_json = _structure_menu_with_openai(restaurant, text)
-            cache.structured_json = structured_json
-            cache.status = success_status
-            cache.error_message = None
+            final_status = success_status
+            error_message = None
         except Exception as exc:
             logger.exception(
                 "Restaurant menu background AI structuring failed",
@@ -562,13 +722,33 @@ def _structure_menu_background(restaurant_id: int, success_status: str) -> None:
                     "source_url": cache.source_url,
                 },
             )
-            cache.structured_json = _fallback_structure(restaurant, text)
-            cache.status = _without_ai_status(success_status)
-            cache.error_message = f"AI menu structuring failed: {exc}"
+            structured_json = _fallback_structure(restaurant, text)
+            final_status = _without_ai_status(success_status)
+            error_message = f"AI menu structuring failed: {exc}"
+        session.refresh(cache)
+        if cache.status != starting_status or cache.pending_content_hash != starting_hash:
+            logger.info(
+                "Discarding stale restaurant menu AI result",
+                extra={
+                    "restaurant_id": restaurant.id,
+                    "restaurant_name": restaurant.name,
+                },
+            )
+            session.rollback()
+            return
         now = datetime.utcnow()
-        cache.last_success_status = cache.status
+        cache.source_url = cache.pending_source_url or cache.source_url
+        cache.extracted_text = text
+        cache.content_hash = starting_hash
+        cache.structured_json = structured_json
+        cache.status = final_status
+        cache.error_message = error_message
+        cache.last_success_status = final_status
         cache.last_success_source_url = cache.source_url
         cache.last_success_at = now
+        cache.pending_source_url = None
+        cache.pending_extracted_text = None
+        cache.pending_content_hash = None
         cache.fetched_at = now
         cache.updated_at = now
         session.commit()
@@ -595,6 +775,23 @@ def menu_cache_pending_is_stale(restaurant: Restaurant) -> bool:
     if cache is None or not cache.status.endswith("_pending") or cache.updated_at is None:
         return False
     return (datetime.utcnow() - cache.updated_at).total_seconds() > MENU_PENDING_TIMEOUT_SECONDS
+
+
+def cancel_menu_parsing(restaurant: Restaurant) -> bool:
+    cache = restaurant.menu_cache
+    if cache is None or not cache.status.endswith("_pending"):
+        return False
+    cache.status = cache.last_success_status or ("cached" if cache.extracted_text else "canceled")
+    cache.error_message = None
+    if cache.last_success_source_url:
+        cache.source_url = cache.last_success_source_url
+    if cache.last_success_at:
+        cache.fetched_at = cache.last_success_at
+    cache.pending_source_url = None
+    cache.pending_extracted_text = None
+    cache.pending_content_hash = None
+    cache.updated_at = datetime.utcnow()
+    return True
 
 
 def search_restaurant_menus(
@@ -765,7 +962,14 @@ def _parse_json_output(output_text: str) -> dict[str, Any]:
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?", "", cleaned).strip()
         cleaned = re.sub(r"```$", "", cleaned).strip()
-    parsed = json.loads(cleaned)
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise
+        parsed = json.loads(cleaned[start : end + 1])
     if not isinstance(parsed, dict):
         raise ValueError("Expected a JSON object.")
     return parsed

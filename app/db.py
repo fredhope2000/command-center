@@ -144,3 +144,24 @@ def _ensure_lightweight_schema_updates() -> None:
                     "ADD COLUMN last_success_at DATETIME"
                 )
             )
+        if menu_cache_columns and "pending_source_url" not in menu_cache_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE restaurant_menu_caches "
+                    "ADD COLUMN pending_source_url VARCHAR"
+                )
+            )
+        if menu_cache_columns and "pending_extracted_text" not in menu_cache_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE restaurant_menu_caches "
+                    "ADD COLUMN pending_extracted_text TEXT"
+                )
+            )
+        if menu_cache_columns and "pending_content_hash" not in menu_cache_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE restaurant_menu_caches "
+                    "ADD COLUMN pending_content_hash VARCHAR"
+                )
+            )

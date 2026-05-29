@@ -212,6 +212,9 @@ class RestaurantMenuCache(Base):
     last_success_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
     last_success_source_url: Mapped[str | None] = mapped_column(String(800), nullable=True)
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pending_source_url: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    pending_extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pending_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

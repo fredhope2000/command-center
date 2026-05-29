@@ -22,6 +22,7 @@ from app.services.restaurant_photos import (
 )
 from app.services.restaurant_menus import (
     apply_menu_result,
+    cancel_menu_parsing,
     import_menu_text_for_restaurant,
     menu_cache_is_pending,
     menu_cache_pending_is_stale,
@@ -447,6 +448,21 @@ def clear_restaurant_menu_error(
     elif cache.extracted_text:
         cache.status = "cached"
     cache.error_message = None
+    db.commit()
+    db.refresh(restaurant)
+    return JSONResponse({"restaurant": _restaurant_payload(restaurant)})
+
+
+@router.post("/{restaurant_id}/menu/parse/cancel")
+def cancel_restaurant_menu_parsing(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    restaurant = db.get(Restaurant, restaurant_id)
+    if restaurant is None:
+        return JSONResponse({"error": "Restaurant not found."}, status_code=404)
+    if not cancel_menu_parsing(restaurant):
+        return JSONResponse({"error": "No menu parsing is in progress."}, status_code=400)
     db.commit()
     db.refresh(restaurant)
     return JSONResponse({"restaurant": _restaurant_payload(restaurant)})

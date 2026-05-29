@@ -730,6 +730,92 @@ def test_restaurant_menu_search_uses_cached_menu_data(client: TestClient) -> Non
     assert results[0]["evidence"][0]["name"] == "Smoky grilled vegetables"
 
 
+def test_restaurant_menu_ai_text_is_chunked_without_truncating() -> None:
+    from app.services.restaurant_menus import _chunk_menu_text_for_ai
+
+    text = "\n".join(f"Dish {index} description" for index in range(2500))
+
+    chunks = _chunk_menu_text_for_ai(text)
+
+    assert len(chunks) > 1
+    assert "Dish 0 description" in chunks[0]
+    assert "Dish 2499 description" in chunks[-1]
+
+
+def test_restaurant_menu_ai_text_chunks_long_single_line_text() -> None:
+    from app.services.restaurant_menus import _chunk_menu_text_for_ai
+
+    text = " ".join(f"Dish {index} description." for index in range(2500))
+
+    chunks = _chunk_menu_text_for_ai(text)
+
+    assert len(chunks) > 1
+    assert all(len(chunk) <= 23_000 for chunk in chunks)
+    assert "Dish 0 description" in chunks[0]
+    assert "Dish 2499 description" in chunks[-1]
+
+
+def test_restaurant_menu_chunk_merge_deduplicates_items() -> None:
+    from app.services.restaurant_menus import _merge_structured_menu_chunks
+
+    merged = _merge_structured_menu_chunks(
+        [
+            {
+                "summary": "First chunk",
+                "items": [
+                    {"name": "Crispy rice", "description": "Garlic rice"},
+                    {"name": "Spicy noodles", "description": "Chile noodles"},
+                    {"name": "Mango Green Tea", "description": "Cold drink"},
+                ],
+            },
+            {
+                "summary": "Second chunk",
+                "items": [
+                    {"name": "Crispy rice", "description": "Garlic rice"},
+                    {"name": "Mango green tea", "description": "Tea drink"},
+                    {"name": "Mango Green Tea (Large)", "description": "Large size"},
+                    {"name": "Mango salad", "description": "Fresh mango"},
+                ],
+            },
+        ]
+    )
+
+    assert merged["summary"].startswith("First chunk")
+    assert [item["name"] for item in merged["items"]] == [
+        "Crispy rice",
+        "Spicy noodles",
+        "Mango Green Tea",
+        "Mango salad",
+    ]
+
+
+def test_restaurant_menu_chunk_merge_deduplicates_summary_sentences() -> None:
+    from app.services.restaurant_menus import _merge_structured_menu_chunks
+
+    merged = _merge_structured_menu_chunks(
+        [
+            {
+                "summary": (
+                    "Thai noodle menu with spicy soups and stir fries. "
+                    "Drinks include milk teas."
+                ),
+                "items": [],
+            },
+            {
+                "summary": (
+                    "Thai noodle menu with spicy soups and stir fries. "
+                    "Sides include rice and roti."
+                ),
+                "items": [],
+            },
+        ]
+    )
+
+    assert merged["summary"].count("Thai noodle menu") == 1
+    assert "Drinks include milk teas." in merged["summary"]
+    assert "Sides include rice and roti." in merged["summary"]
+
+
 def test_restaurant_menu_text_can_be_imported(client: TestClient) -> None:
     client.post(
         "/restaurants/",
@@ -833,6 +919,95 @@ def test_stale_restaurant_menu_pending_state_can_be_overwritten(
     assert response.json()["restaurant"]["menu_cache"]["status"] == (
         "imported_without_ai"
     )
+
+
+def test_restaurant_menu_pending_parse_can_be_canceled(client: TestClient) -> None:
+    from sqlalchemy import text
+
+    from app.db import engine
+
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "cancel-menu-place-1",
+            "name": "Cancel Menu Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    client.post("/restaurants/1/menu/import", json={"extracted_text": "Old menu"})
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE restaurant_menu_caches "
+                "SET status = 'import_pending', updated_at = CURRENT_TIMESTAMP "
+                "WHERE restaurant_id = 1"
+            )
+        )
+
+    cancel_response = client.post("/restaurants/1/menu/parse/cancel")
+
+    assert cancel_response.status_code == 200
+    cache = cancel_response.json()["restaurant"]["menu_cache"]
+    assert cache["status"] == "imported_without_ai"
+    assert cache["has_data"] is True
+
+    import_response = client.post(
+        "/restaurants/1/menu/import",
+        json={"extracted_text": "New menu"},
+    )
+    assert import_response.status_code == 200
+
+
+def test_pending_restaurant_menu_parse_preserves_existing_menu_data(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.routes import restaurants as restaurant_routes
+    from app.services.restaurant_menus import MenuFetchResult
+
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "preserve-menu-place-1",
+            "name": "Preserve Menu Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    client.post("/restaurants/1/menu/import", json={"extracted_text": "Old smoky menu"})
+
+    monkeypatch.setattr(restaurant_routes, "queue_menu_ai_structure", lambda *_: None)
+
+    def fake_import(_restaurant, source_url, extracted_text):
+        return MenuFetchResult(
+            source_url=source_url,
+            extracted_text=extracted_text,
+            structured_json={"summary": "Parsing imported menu with AI.", "items": []},
+            status="import_pending",
+        )
+
+    monkeypatch.setattr(
+        restaurant_routes, "import_menu_text_for_restaurant", fake_import
+    )
+    pending_response = client.post(
+        "/restaurants/1/menu/import",
+        json={"extracted_text": "New crispy menu"},
+    )
+
+    assert pending_response.status_code == 200
+    cache = pending_response.json()["restaurant"]["menu_cache"]
+    assert cache["status"] == "import_pending"
+    assert cache["has_data"] is True
+    assert cache["has_pending_data"] is True
+
+    menu_response = client.get("/restaurants/1/menu")
+    assert "Old smoky menu" in menu_response.json()["extracted_text"]
+
+    cancel_response = client.post("/restaurants/1/menu/parse/cancel")
+    assert cancel_response.status_code == 200
+    canceled_menu_response = client.get("/restaurants/1/menu")
+    assert "Old smoky menu" in canceled_menu_response.json()["extracted_text"]
 
 
 def test_failed_restaurant_menu_refresh_keeps_existing_cache_data(
