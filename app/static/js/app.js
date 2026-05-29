@@ -549,6 +549,19 @@ function setRestaurantControlsCollapsed(shell, collapsed) {
   resizeRestaurantMap();
 }
 
+function setRestaurantResultsCollapsed(shell, collapsed) {
+  shell.classList.toggle("is-restaurant-results-collapsed", collapsed);
+  const toggle = shell.querySelector("[data-toggle-restaurant-results]");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.setAttribute(
+      "aria-label",
+      collapsed ? "Expand restaurant results" : "Collapse restaurant results",
+    );
+  }
+  resizeRestaurantMap();
+}
+
 function showRestaurantAddSearch(shell) {
   const searchWrap = shell.querySelector("[data-restaurant-add-search]");
   const searchInput = shell.querySelector("[data-restaurant-place-search]");
@@ -1739,6 +1752,14 @@ function wireRestaurantMap() {
   shell
     .querySelector("[data-clear-restaurant-menu-search]")
     ?.addEventListener("click", () => clearRestaurantMenuSearch(shell));
+  shell
+    .querySelector("[data-toggle-restaurant-results]")
+    ?.addEventListener("click", () => {
+      setRestaurantResultsCollapsed(
+        shell,
+        !shell.classList.contains("is-restaurant-results-collapsed"),
+      );
+    });
   shell
     .querySelector("[data-collapse-restaurant-controls]")
     ?.addEventListener("click", () => setRestaurantControlsCollapsed(shell, true));

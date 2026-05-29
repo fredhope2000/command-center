@@ -1136,7 +1136,47 @@ td form {
   color: var(--muted);
   font-size: 0.9rem;
   line-height: 1.1;
+  margin: 0;
+}
+
+.restaurant-results-heading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
   margin: -2px 0 -8px;
+}
+
+.restaurant-results-toggle {
+  align-items: center;
+  background: #f8faf7;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: none;
+  flex: 0 0 auto;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+
+.restaurant-results-toggle span {
+  border-bottom: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  height: 8px;
+  transform: translateY(2px) rotate(-135deg);
+  transition: transform 0.16s ease;
+  width: 8px;
+}
+
+.restaurant-results-toggle:hover {
+  border-color: #b9c8be;
+  color: var(--ink);
+}
+
+.restaurant-map-shell.is-restaurant-results-collapsed .restaurant-results-toggle span {
+  transform: translateY(-2px) rotate(45deg);
 }
 
 .restaurant-craving-search {
@@ -1973,6 +2013,14 @@ td form {
 
   .restaurant-list {
     min-height: clamp(420px, 58vh, 640px);
+  }
+
+  .restaurant-results-toggle {
+    display: inline-flex;
+  }
+
+  .restaurant-map-shell.is-restaurant-results-collapsed .restaurant-list {
+    display: none;
   }
 
   .restaurant-map-shell.is-controls-collapsed {

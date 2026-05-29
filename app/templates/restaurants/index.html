@@ -69,7 +69,18 @@
             <option value="5">5</option>
           </select>
         </label>
-        <p class="restaurant-result-count" data-restaurant-result-count>{{ restaurants|length }} of {{ restaurants|length }} {{ 'item' if restaurants|length == 1 else 'items' }} shown</p>
+        <div class="restaurant-results-heading">
+          <p class="restaurant-result-count" data-restaurant-result-count>{{ restaurants|length }} of {{ restaurants|length }} {{ 'item' if restaurants|length == 1 else 'items' }} shown</p>
+          <button
+            class="restaurant-results-toggle"
+            type="button"
+            aria-label="Collapse restaurant results"
+            aria-expanded="true"
+            data-toggle-restaurant-results
+          >
+            <span aria-hidden="true"></span>
+          </button>
+        </div>
       </div>
 
       <div class="restaurant-list" data-restaurant-list>
