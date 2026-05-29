@@ -816,6 +816,51 @@ def test_restaurant_menu_chunk_merge_deduplicates_summary_sentences() -> None:
     assert "Sides include rice and roti." in merged["summary"]
 
 
+def test_restaurant_menu_summary_consolidation_uses_merged_items() -> None:
+    import json
+    from types import SimpleNamespace
+
+    from app.models.food import Restaurant
+    from app.services.restaurant_menus import _summarize_merged_menu_with_openai
+
+    captured_prompts = []
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured_prompts.append(json.loads(kwargs["input"]))
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "summary": (
+                            "Thai menu with noodle soups, stir fries, sides, and "
+                            "fruit teas, with spicy, savory, and fresh flavors."
+                        )
+                    }
+                )
+            )
+
+    class FakeClient:
+        responses = FakeResponses()
+
+    restaurant = Restaurant(
+        google_place_id="summary-place",
+        name="Summary Thai",
+        latitude=37.77,
+        longitude=-122.42,
+    )
+    menu = {
+        "items": [
+            {"name": "Boat noodles", "category": "Noodles", "flavor_tags": ["spicy"]},
+            {"name": "Mango green tea", "category": "Drinks", "flavor_tags": ["fresh"]},
+        ]
+    }
+
+    summary = _summarize_merged_menu_with_openai(FakeClient(), restaurant, menu)
+
+    assert "noodle soups" in summary
+    assert captured_prompts[0]["items"][1]["name"] == "Mango green tea"
+
+
 def test_restaurant_menu_text_can_be_imported(client: TestClient) -> None:
     client.post(
         "/restaurants/",

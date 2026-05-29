@@ -452,7 +452,17 @@ def _structure_menu_with_openai(restaurant: Restaurant, text: str) -> dict[str, 
         )
         for index, chunk in enumerate(chunks, start=1)
     ]
-    return _merge_structured_menu_chunks(structured_chunks)
+    merged = _merge_structured_menu_chunks(structured_chunks)
+    try:
+        merged["summary"] = _summarize_merged_menu_with_openai(
+            client, restaurant, merged
+        )
+    except Exception:
+        logger.exception(
+            "Restaurant menu summary consolidation failed",
+            extra={"restaurant_id": restaurant.id, "restaurant_name": restaurant.name},
+        )
+    return merged
 
 
 def _structure_menu_chunk_with_openai(
@@ -577,6 +587,44 @@ def _merge_structured_menu_chunks(chunks: list[dict[str, Any]]) -> dict[str, Any
         "summary": _merge_menu_summaries(summaries) or "Menu parsed from cached text.",
         "items": merged_items,
     }
+
+
+def _summarize_merged_menu_with_openai(
+    client: Any, restaurant: Restaurant, menu: dict[str, Any]
+) -> str:
+    items = menu.get("items") or []
+    compact_items = []
+    for item in items[:350]:
+        if not isinstance(item, dict):
+            continue
+        compact_items.append(
+            {
+                "name": item.get("name"),
+                "category": item.get("category"),
+                "flavor_tags": item.get("flavor_tags") or [],
+            }
+        )
+    prompt = {
+        "restaurant": restaurant.custom_name or restaurant.name,
+        "instructions": (
+            "Write one concise, non-repetitive restaurant menu summary. Mention the "
+            "main menu categories, cuisine/style, and notable flavor themes when "
+            "supported by the items. Do not list every item. Do not repeat phrases. "
+            "Return strict JSON with key summary."
+        ),
+        "items": compact_items,
+    }
+    response = client.responses.create(
+        model=settings.openai_restaurant_model,
+        input=json.dumps(prompt),
+        max_output_tokens=600,
+        text={"format": {"type": "json_object"}},
+    )
+    parsed = _parse_json_output(getattr(response, "output_text", ""))
+    summary = _clean_text(str(parsed.get("summary") or ""))
+    if not summary:
+        raise ValueError("OpenAI returned an empty menu summary.")
+    return summary[:700]
 
 
 def _merge_menu_summaries(summaries: list[str]) -> str:
