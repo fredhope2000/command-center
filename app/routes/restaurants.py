@@ -60,6 +60,7 @@ def _restaurant_payload(restaurant: Restaurant) -> dict[str, Any]:
         "longitude": restaurant.longitude,
         "google_maps_uri": restaurant.google_maps_uri,
         "website_uri": restaurant.website_uri,
+        "menu_url": restaurant.menu_url,
         "phone_number": restaurant.phone_number,
         "status": restaurant.status.value,
         "status_label": _status_label(restaurant.status.value),
@@ -190,6 +191,7 @@ async def create_restaurant(request: Request, db: Session = Depends(get_db)):
         longitude=float(longitude),
         google_maps_uri=_clean(payload.get("google_maps_uri")),
         website_uri=_clean(payload.get("website_uri")),
+        menu_url=_clean(payload.get("menu_url")),
         phone_number=_clean(payload.get("phone_number")),
         custom_name=_clean(payload.get("custom_name")),
         status=RestaurantStatus(_clean(payload.get("status")) or "want_to_try"),
@@ -221,6 +223,7 @@ def update_restaurant(
     custom_name: str = Form(""),
     personal_rating: str = Form(""),
     price_level: str = Form(""),
+    menu_url: str = Form(""),
     notes: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -240,6 +243,7 @@ def update_restaurant(
     restaurant.custom_name = _clean(custom_name)
     restaurant.personal_rating = _parse_rating(personal_rating)
     restaurant.price_level = _clean(price_level)
+    restaurant.menu_url = _clean(menu_url)
     restaurant.notes = _clean(notes)
     db.commit()
     db.refresh(restaurant)
@@ -345,3 +349,26 @@ def refresh_restaurant_menu(
     db.commit()
     db.refresh(restaurant)
     return JSONResponse({"restaurant": _restaurant_payload(restaurant)})
+
+
+@router.get("/{restaurant_id}/menu")
+def restaurant_menu_data(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    restaurant = db.get(Restaurant, restaurant_id)
+    if restaurant is None:
+        return JSONResponse({"error": "Restaurant not found."}, status_code=404)
+    cache = restaurant.menu_cache
+    if cache is None:
+        return JSONResponse({"error": "No menu cache found."}, status_code=404)
+    return {
+        "restaurant_id": restaurant.id,
+        "restaurant_name": restaurant.custom_name or restaurant.name,
+        "status": cache.status,
+        "source_url": cache.source_url,
+        "fetched_at": cache.fetched_at.isoformat() if cache.fetched_at else None,
+        "error_message": cache.error_message,
+        "extracted_text": cache.extracted_text or "",
+        "structured_json": cache.structured_json or {},
+    }

@@ -164,6 +164,7 @@ class Restaurant(Base):
     longitude: Mapped[float] = mapped_column(Float, nullable=False)
     google_maps_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
     website_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    menu_url: Mapped[str | None] = mapped_column(String(800), nullable=True)
     phone_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[RestaurantStatus] = mapped_column(
         Enum(RestaurantStatus), nullable=False, default=RestaurantStatus.WANT_TO_TRY

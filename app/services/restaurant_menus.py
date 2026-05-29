@@ -23,6 +23,12 @@ MAX_MENU_PAGES = 6
 MAX_EXTRACTED_TEXT = 120_000
 REQUEST_TIMEOUT = 8.0
 MENU_LINK_RE = re.compile(r"\b(menu|food|dinner|lunch|brunch|breakfast)\b", re.I)
+MENU_FETCH_HEADERS = {
+    "User-Agent": "python-requests/2.32.5",
+    "Accept": "*/*",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+}
 
 
 @dataclass(frozen=True)
@@ -86,7 +92,8 @@ class _ReadableHtmlParser(HTMLParser):
 def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
     if not settings.is_production:
         return _mock_menu_result(restaurant)
-    if not restaurant.website_uri:
+    target_url = restaurant.menu_url or restaurant.website_uri
+    if not target_url:
         logger.info(
             "Restaurant menu refresh skipped without website",
             extra={"restaurant_id": restaurant.id, "restaurant_name": restaurant.name},
@@ -105,16 +112,18 @@ def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
             "restaurant_id": restaurant.id,
             "restaurant_name": restaurant.name,
             "website_url": restaurant.website_uri,
+            "menu_url": restaurant.menu_url,
+            "target_url": target_url,
         },
     )
-    extracted = _fetch_menu_text(restaurant.website_uri)
+    extracted = _fetch_menu_text(target_url)
     if not extracted.extracted_text:
         logger.warning(
             "Restaurant menu refresh failed before AI",
             extra={
                 "restaurant_id": restaurant.id,
                 "restaurant_name": restaurant.name,
-                "website_url": restaurant.website_uri,
+                "target_url": target_url,
                 "status": extracted.status,
                 "error_message": extracted.error_message,
             },
@@ -172,7 +181,7 @@ def _fetch_menu_text(website_url: str) -> MenuFetchResult:
         with httpx.Client(
             follow_redirects=True,
             timeout=REQUEST_TIMEOUT,
-            headers={"User-Agent": "CommandCenterMenuFetcher/1.0"},
+            headers=MENU_FETCH_HEADERS,
         ) as client:
             first_page = _fetch_page(client, website_url)
             candidate_urls = _menu_candidate_urls(website_url, first_page.links)
@@ -373,7 +382,7 @@ def _mock_menu_result(restaurant: Restaurant) -> MenuFetchResult:
         ],
     }
     return MenuFetchResult(
-        source_url=restaurant.website_uri,
+        source_url=restaurant.menu_url or restaurant.website_uri,
         extracted_text=extracted_text,
         structured_json=structured,
         status="mocked",

@@ -587,6 +587,7 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
             "longitude": -122.42,
             "google_maps_uri": "https://maps.google.com/?cid=test",
             "website_uri": "https://example.test",
+            "menu_url": "https://example.test/menu",
             "phone_number": "+1 555-0100",
             "category": "date_night",
         },
@@ -616,6 +617,7 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
             "neighborhood": "Mission",
             "personal_rating": "5",
             "price_level": "$$",
+            "menu_url": "https://example.test/current-menu",
             "notes": "Order the rigatoni.",
         },
         follow_redirects=False,
@@ -631,6 +633,7 @@ def test_restaurant_can_be_created_and_updated(client: TestClient) -> None:
     assert restaurant["category"] == "casual_dates"
     assert restaurant["category_label"] == "Casual Dates"
     assert restaurant["personal_rating"] == 5
+    assert restaurant["menu_url"] == "https://example.test/current-menu"
     assert restaurant["notes"] == "Order the rigatoni."
     assert restaurant["photos"] == []
 
@@ -674,6 +677,7 @@ def test_restaurant_menu_refresh_uses_dev_mock_cache(client: TestClient) -> None
             "latitude": 37.77,
             "longitude": -122.42,
             "website_uri": "https://example.test",
+            "menu_url": "https://example.test/direct-menu",
             "cuisine": "Noodles",
             "tags": "smoky, casual",
         },
@@ -686,6 +690,7 @@ def test_restaurant_menu_refresh_uses_dev_mock_cache(client: TestClient) -> None
     assert refresh_response.status_code == 200
     restaurant = refresh_response.json()["restaurant"]
     assert restaurant["menu_cache"]["status"] == "mocked"
+    assert restaurant["menu_cache"]["source_url"] == "https://example.test/direct-menu"
     assert restaurant["menu_cache"]["item_count"] == 2
     assert restaurant["menu_cache"]["summary"] == (
         "Development mock menu generated without AI."
@@ -693,6 +698,12 @@ def test_restaurant_menu_refresh_uses_dev_mock_cache(client: TestClient) -> None
 
     data_response = client.get("/restaurants/data")
     assert data_response.json()["restaurants"][0]["menu_cache"]["status"] == "mocked"
+
+    menu_response = client.get("/restaurants/1/menu")
+    assert menu_response.status_code == 200
+    assert menu_response.json()["source_url"] == "https://example.test/direct-menu"
+    assert "smoky grilled vegetables" in menu_response.json()["extracted_text"]
+    assert len(menu_response.json()["structured_json"]["items"]) == 2
 
 
 def test_restaurant_menu_search_uses_cached_menu_data(client: TestClient) -> None:
@@ -867,6 +878,32 @@ def test_restaurant_custom_name_column_is_added_to_existing_sqlite_table(
     assert response.json()["name"] == "House Cafe"
     assert response.json()["google_name"] == "Maps Cafe"
     assert response.json()["custom_name"] == "House Cafe"
+
+
+def test_restaurant_menu_url_column_is_added_to_existing_sqlite_table(
+    client: TestClient,
+) -> None:
+    from sqlalchemy import text
+
+    from app.db import engine, init_db
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE restaurants DROP COLUMN menu_url"))
+
+    init_db()
+
+    response = client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "menu-url-place-1",
+            "name": "Menu URL Cafe",
+            "menu_url": "https://example.test/menu.pdf",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["menu_url"] == "https://example.test/menu.pdf"
 
 
 def test_structured_recipe_ingredients_reduce_inventory(client: TestClient) -> None:

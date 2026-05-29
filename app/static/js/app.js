@@ -397,6 +397,11 @@ const restaurantState = {
   restaurants: [],
   markers: new Map(),
   menuFetches: new Set(),
+  autosave: {
+    timer: null,
+    pendingForm: null,
+    inFlight: null,
+  },
   selectedId: null,
 };
 
@@ -483,6 +488,9 @@ function filteredRestaurants(shell) {
 
 function closeRestaurantDetail() {
   closeRestaurantPhotoOverlay();
+  window.clearTimeout(restaurantState.autosave.timer);
+  restaurantState.autosave.timer = null;
+  restaurantState.autosave.pendingForm = null;
   const panel = document.querySelector("[data-restaurant-detail]");
   if (panel) {
     panel.hidden = true;
@@ -610,6 +618,9 @@ function renderRestaurantMenuCache(restaurant) {
   const source = cache?.source_url
     ? `<small>Source: <a href="${escapeHtml(cache.source_url)}" target="_blank" rel="noreferrer">${escapeHtml(cache.source_url)}</a></small>`
     : "";
+  const viewButton = cache
+    ? `<button class="ghost" type="button" data-view-restaurant-menu="${restaurant.id}">View Menu Data</button>`
+    : "";
 
   return `
     <section class="restaurant-menu-cache">
@@ -619,7 +630,10 @@ function renderRestaurantMenuCache(restaurant) {
       </div>
       ${summary}
       ${source}
+      <div class="restaurant-menu-cache-actions">
       <button class="ghost" type="button" data-refresh-restaurant-menu="${restaurant.id}" ${isFetching ? "disabled" : ""}>${isFetching ? "Fetching..." : "Fetch/Update Menu"}</button>
+      ${viewButton}
+    </div>
     </section>
   `;
 }
@@ -807,14 +821,18 @@ function selectRestaurant(restaurantId) {
         </label>
       </div>
       <label>
+        Menu URL
+        <input name="menu_url" value="${escapeHtml(restaurant.menu_url)}" placeholder="Optional direct menu page or PDF URL">
+      </label>
+      <label>
         Notes
         <textarea name="notes" rows="5" placeholder="What to order, who recommended it, visit notes">${escapeHtml(restaurant.notes)}</textarea>
       </label>
+      <span class="restaurant-autosave-status" data-restaurant-autosave-status>Saved</span>
     </form>
     ${renderRestaurantMenuCache(restaurant)}
     ${renderRestaurantPhotos(restaurant)}
     <div class="restaurant-detail-actions">
-      <button form="restaurant-detail-form-${restaurant.id}" type="submit">Save</button>
       <form class="restaurant-delete-form js-confirm-delete" action="/restaurants/${restaurant.id}/delete" method="post">
       <button class="ghost" type="submit">Delete</button>
       </form>
@@ -823,7 +841,7 @@ function selectRestaurant(restaurantId) {
 
   panel
     .querySelector("[data-close-restaurant-detail]")
-    ?.addEventListener("click", closeRestaurantDetail);
+    ?.addEventListener("click", closeRestaurantDetailAfterAutosave);
   panel
     .querySelector("[data-edit-restaurant-name]")
     ?.addEventListener("click", () => {
@@ -840,12 +858,16 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector(".restaurant-detail-form")
     ?.addEventListener("submit", saveRestaurantDetailForm);
+  wireRestaurantDetailAutosave(panel);
   panel
     .querySelector("[data-restaurant-photo-upload] input")
     ?.addEventListener("change", uploadRestaurantPhoto);
   panel
     .querySelector("[data-refresh-restaurant-menu]")
     ?.addEventListener("click", refreshRestaurantMenu);
+  panel
+    .querySelector("[data-view-restaurant-menu]")
+    ?.addEventListener("click", viewRestaurantMenuData);
   panel.addEventListener("click", handleRestaurantPhotoPreviewClick);
   panel.addEventListener("click", handleRestaurantPhotoDeleteClick);
   wireConfirmDeleteForms();
@@ -854,10 +876,103 @@ function selectRestaurant(restaurantId) {
     ?.addEventListener("submit", deleteRestaurantDetailForm);
 }
 
+async function viewRestaurantMenuData(event) {
+  const restaurantId = Number(event.currentTarget.dataset.viewRestaurantMenu);
+  if (!restaurantId) {
+    return;
+  }
+  const response = await fetch(`/restaurants/${restaurantId}/menu`, {
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || "Could not load menu data.");
+  }
+  showRestaurantMenuDataOverlay(payload);
+}
+
+function showRestaurantMenuDataOverlay(payload) {
+  closeRestaurantMenuDataOverlay();
+  const items = payload.structured_json?.items || [];
+  const overlay = document.createElement("div");
+  overlay.className = "restaurant-menu-data-overlay";
+  overlay.dataset.restaurantMenuDataOverlay = "";
+  overlay.innerHTML = `
+    <div class="restaurant-menu-data-frame">
+      <div class="restaurant-menu-data-heading">
+        <div>
+          <strong>${escapeHtml(payload.restaurant_name || "Menu data")}</strong>
+          <span>${escapeHtml(payload.status || "unknown")}${payload.fetched_at ? ` · ${escapeHtml(new Date(payload.fetched_at).toLocaleString())}` : ""}</span>
+        </div>
+        <button type="button" class="restaurant-menu-data-close" aria-label="Close">×</button>
+      </div>
+      ${
+        payload.source_url
+          ? `<a class="restaurant-menu-data-source" href="${escapeHtml(payload.source_url)}" target="_blank" rel="noreferrer">${escapeHtml(payload.source_url)}</a>`
+          : ""
+      }
+      ${
+        payload.error_message
+          ? `<p class="restaurant-menu-data-error">${escapeHtml(payload.error_message)}</p>`
+          : ""
+      }
+      <div class="restaurant-menu-data-columns">
+        <section>
+          <h3>Items</h3>
+          <div class="restaurant-menu-data-items">
+            ${
+              items.length
+                ? items
+                    .slice(0, 80)
+                    .map(
+                      (item) => `
+                        <article>
+                          <strong>${escapeHtml(item.name || "Unnamed item")}</strong>
+                          ${item.description ? `<span>${escapeHtml(item.description)}</span>` : ""}
+                          ${
+                            item.flavor_tags?.length
+                              ? `<small>${escapeHtml(item.flavor_tags.join(", "))}</small>`
+                              : ""
+                          }
+                        </article>
+                      `,
+                    )
+                    .join("")
+                : `<p class="empty">No structured items found.</p>`
+            }
+          </div>
+        </section>
+        <section>
+          <h3>Extracted Text</h3>
+          <pre>${escapeHtml((payload.extracted_text || "").slice(0, 20000))}</pre>
+        </section>
+      </div>
+    </div>
+  `;
+  overlay.addEventListener("click", (overlayEvent) => {
+    if (
+      overlayEvent.target === overlay ||
+      overlayEvent.target.closest(".restaurant-menu-data-close")
+    ) {
+      closeRestaurantMenuDataOverlay();
+    }
+  });
+  document.body.append(overlay);
+}
+
+function closeRestaurantMenuDataOverlay() {
+  document.querySelector("[data-restaurant-menu-data-overlay]")?.remove();
+}
+
 async function refreshRestaurantMenu(event) {
   const button = event.currentTarget;
   const restaurantId = Number(button.dataset.refreshRestaurantMenu);
   if (!restaurantId) {
+    return;
+  }
+  try {
+    await flushRestaurantDetailAutosave();
+  } catch {
     return;
   }
   restaurantState.menuFetches.add(restaurantId);
@@ -1022,15 +1137,69 @@ function updateRestaurantFromPayload(payload) {
   }
 }
 
-async function saveRestaurantDetailForm(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const submitButton = form.querySelector('button[type="submit"]');
-  if (submitButton) {
-    submitButton.disabled = true;
+function wireRestaurantDetailAutosave(panel) {
+  const form = panel.querySelector(".restaurant-detail-form");
+  if (!form) {
+    return;
   }
+  form.querySelectorAll("input, textarea, select").forEach((element) => {
+    element.addEventListener("input", () => scheduleRestaurantDetailAutosave(form));
+    element.addEventListener("change", () => {
+      const delay = element.matches("select") ? 0 : 700;
+      scheduleRestaurantDetailAutosave(form, delay);
+    });
+    element.addEventListener("blur", () => {
+      flushRestaurantDetailAutosave().catch(() => {});
+    });
+  });
+}
 
-  try {
+function setRestaurantAutosaveStatus(form, text, state = "") {
+  const status = form?.querySelector("[data-restaurant-autosave-status]");
+  if (!status) {
+    return;
+  }
+  status.textContent = text;
+  status.dataset.state = state;
+}
+
+function scheduleRestaurantDetailAutosave(form, delay = 700) {
+  if (!form) {
+    return;
+  }
+  restaurantState.autosave.pendingForm = form;
+  window.clearTimeout(restaurantState.autosave.timer);
+  setRestaurantAutosaveStatus(form, "Saving...", "pending");
+  restaurantState.autosave.timer = window.setTimeout(() => {
+    saveRestaurantDetail(form);
+  }, delay);
+}
+
+async function flushRestaurantDetailAutosave() {
+  const autosave = restaurantState.autosave;
+  if (autosave.timer) {
+    window.clearTimeout(autosave.timer);
+    autosave.timer = null;
+    if (autosave.pendingForm) {
+      await saveRestaurantDetail(autosave.pendingForm);
+    }
+  }
+  if (autosave.inFlight) {
+    await autosave.inFlight;
+  }
+}
+
+async function saveRestaurantDetail(form) {
+  if (!form) {
+    return null;
+  }
+  const autosave = restaurantState.autosave;
+  autosave.pendingForm = null;
+  window.clearTimeout(autosave.timer);
+  autosave.timer = null;
+
+  const request = (async () => {
+    setRestaurantAutosaveStatus(form, "Saving...", "saving");
     const response = await fetch(form.action, {
       method: "POST",
       headers: { Accept: "application/json" },
@@ -1040,15 +1209,37 @@ async function saveRestaurantDetailForm(event) {
     if (!response.ok) {
       throw new Error(payload.error || "Could not save restaurant.");
     }
-
     updateRestaurantFromPayload(payload);
     renderRestaurants({ fitMap: false });
-    closeRestaurantDetail();
+    setRestaurantAutosaveStatus(form, "Saved", "saved");
+    return payload;
+  })();
+
+  autosave.inFlight = request;
+  try {
+    return await request;
+  } catch (error) {
+    setRestaurantAutosaveStatus(form, error.message || "Could not save", "error");
+    throw error;
   } finally {
-    if (submitButton) {
-      submitButton.disabled = false;
+    if (autosave.inFlight === request) {
+      autosave.inFlight = null;
     }
   }
+}
+
+async function saveRestaurantDetailForm(event) {
+  event.preventDefault();
+  await saveRestaurantDetail(event.currentTarget);
+}
+
+async function closeRestaurantDetailAfterAutosave() {
+  try {
+    await flushRestaurantDetailAutosave();
+  } catch {
+    return;
+  }
+  closeRestaurantDetail();
 }
 
 async function deleteRestaurantDetailForm(event) {
