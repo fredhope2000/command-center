@@ -1170,7 +1170,10 @@ td form {
   width: 8px;
 }
 
-.restaurant-results-toggle:hover {
+.restaurant-results-toggle:hover,
+.restaurant-results-toggle:active,
+.restaurant-results-toggle:focus {
+  background: #f8faf7;
   border-color: #b9c8be;
   color: var(--ink);
 }
