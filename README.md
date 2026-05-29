@@ -68,6 +68,10 @@ elsewhere. Override `RESTAURANT_PHOTOS_S3_BUCKET`,
 `RESTAURANT_PHOTOS_S3_PREFIX`, or `RESTAURANT_PHOTOS_BASE_URL` only if that
 storage layout changes.
 
+Restaurant AI features require `OPENAI_API_KEY` in production. Menu parsing uses
+`OPENAI_RESTAURANT_MODEL` and restaurant Q&A uses `OPENAI_RESTAURANT_QA_MODEL`,
+so answer quality can be raised without changing the menu extraction cost.
+
 Example env files live in `deploy/env/`.
 
 Recommended environment/database combinations:

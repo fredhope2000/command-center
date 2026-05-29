@@ -137,6 +137,21 @@ def test_restaurant_ai_is_enabled_only_in_production_with_key(
     assert config.settings.restaurant_ai_enabled is True
 
 
+def test_restaurant_qa_model_can_be_configured_separately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_RESTAURANT_MODEL", "menu-model")
+    monkeypatch.delenv("OPENAI_RESTAURANT_QA_MODEL", raising=False)
+    config = _reload_config()
+    assert config.settings.openai_restaurant_model == "menu-model"
+    assert config.settings.openai_restaurant_qa_model == "menu-model"
+
+    monkeypatch.setenv("OPENAI_RESTAURANT_QA_MODEL", "qa-model")
+    config = _reload_config()
+    assert config.settings.openai_restaurant_model == "menu-model"
+    assert config.settings.openai_restaurant_qa_model == "qa-model"
+
+
 def test_dashboard_renders(client: TestClient) -> None:
     response = client.get("/")
 
@@ -773,6 +788,142 @@ def test_restaurant_ask_uses_saved_restaurant_data(client: TestClient) -> None:
     assert payload["results"][0]["name"] == "Pasta Date"
     assert "casual" in payload["results"][0]["reason"]
     assert "Order the rigatoni" in payload["results"][0]["evidence"][0]
+
+
+def test_restaurant_ask_prioritizes_better_date_cuisine_match(
+    client: TestClient,
+) -> None:
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "korean-date-place-1",
+            "name": "Tang Jip",
+            "latitude": 37.77,
+            "longitude": -122.42,
+            "status": "visited",
+            "category": "casual_dates",
+            "cuisine": "Korean",
+            "tags": "soup, casual",
+            "personal_rating": "4",
+        },
+    )
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "korean-date-place-2",
+            "name": "Vivid Bibim",
+            "latitude": 37.78,
+            "longitude": -122.43,
+            "status": "visited",
+            "category": "date_night",
+            "cuisine": "Korean",
+            "tags": "date night, bibimbap",
+            "personal_rating": "5",
+            "notes": "We like this one even more.",
+        },
+    )
+
+    response = client.post(
+        "/restaurants/ask",
+        json={"question": "What is a good date spot with Korean food?"},
+    )
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["name"] == "Vivid Bibim"
+    assert results[1]["name"] == "Tang Jip"
+
+
+def test_restaurant_ask_understands_mid_as_mediocre(
+    client: TestClient,
+) -> None:
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "mid-place-1",
+            "name": "Okay Bowl",
+            "latitude": 37.77,
+            "longitude": -122.42,
+            "status": "visited",
+            "cuisine": "Korean",
+            "personal_rating": "3",
+            "notes": "Pretty mid, but convenient.",
+        },
+    )
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "mid-place-2",
+            "name": "Great Bowl",
+            "latitude": 37.78,
+            "longitude": -122.43,
+            "status": "visited",
+            "cuisine": "Korean",
+            "personal_rating": "5",
+            "notes": "Loved this one.",
+        },
+    )
+
+    response = client.post(
+        "/restaurants/ask",
+        json={"question": "Which restaurants were mediocre?"},
+    )
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results[0]["name"] == "Okay Bowl"
+    assert "mid" in results[0]["reason"]
+
+
+def test_restaurant_ask_expands_asian_to_east_and_southeast_asian_cuisines(
+    client: TestClient,
+) -> None:
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "asian-place-1",
+            "name": "Curry House",
+            "latitude": 37.77,
+            "longitude": -122.42,
+            "status": "visited",
+            "cuisine": "Indian",
+            "personal_rating": "5",
+        },
+    )
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "asian-place-2",
+            "name": "Seoul Table",
+            "latitude": 37.78,
+            "longitude": -122.43,
+            "status": "visited",
+            "cuisine": "Korean",
+            "personal_rating": "4",
+        },
+    )
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "asian-place-3",
+            "name": "Thai Corner",
+            "latitude": 37.79,
+            "longitude": -122.44,
+            "status": "visited",
+            "cuisine": "Thai",
+            "personal_rating": "4",
+        },
+    )
+
+    response = client.post(
+        "/restaurants/ask",
+        json={"question": "What are good Asian food options?"},
+    )
+
+    assert response.status_code == 200
+    names = [result["name"] for result in response.json()["results"]]
+    assert names[:2] == ["Seoul Table", "Thai Corner"]
+    assert "Curry House" not in names[:2]
 
 
 def test_restaurant_ask_requires_question(client: TestClient) -> None:

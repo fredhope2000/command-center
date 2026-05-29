@@ -34,6 +34,10 @@ class Settings:
     openai_restaurant_model: str = os.getenv(
         "OPENAI_RESTAURANT_MODEL", "gpt-5.4-nano"
     )
+    openai_restaurant_qa_model: str = os.getenv(
+        "OPENAI_RESTAURANT_QA_MODEL",
+        os.getenv("OPENAI_RESTAURANT_MODEL", "gpt-5.4-mini"),
+    )
 
     @property
     def is_production(self) -> bool:

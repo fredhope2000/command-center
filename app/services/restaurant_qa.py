@@ -9,7 +9,8 @@ from app.models.food import Restaurant
 from app.services.restaurant_menus import _parse_json_output
 
 
-MAX_CANDIDATES_FOR_AI = 8
+MAX_CANDIDATES_FOR_AI = 20
+MAX_ANSWER_RESULTS = 8
 MAX_MENU_ITEMS_PER_RESTAURANT = 8
 MAX_NOTE_LENGTH = 700
 MAX_DESCRIPTION_LENGTH = 280
@@ -28,7 +29,6 @@ STOP_WORDS = {
     "does",
     "for",
     "from",
-    "good",
     "have",
     "how",
     "like",
@@ -39,6 +39,8 @@ STOP_WORDS = {
     "restaurant",
     "restaurants",
     "should",
+    "spot",
+    "spots",
     "that",
     "the",
     "there",
@@ -48,6 +50,23 @@ STOP_WORDS = {
     "which",
     "with",
     "would",
+}
+
+QUERY_SYNONYMS = {
+    "asian": {
+        "chinese",
+        "dumpling",
+        "japanese",
+        "korean",
+        "ramen",
+        "sushi",
+        "thai",
+        "vietnamese",
+    },
+    "mediocre": {"average", "fine", "meh", "mid", "okay", "underwhelming"},
+    "mid": {"average", "fine", "mediocre", "meh", "okay", "underwhelming"},
+    "meh": {"average", "fine", "mediocre", "mid", "okay", "underwhelming"},
+    "okay": {"average", "fine", "mediocre", "meh", "mid", "underwhelming"},
 }
 
 
@@ -73,18 +92,28 @@ def _rank_restaurant_candidates(
 ) -> list[dict[str, Any]]:
     query_terms = _query_terms(question)
     broad_ranking = _looks_like_broad_ranking(question)
+    date_request = _looks_like_date_request(question)
+    mediocre_request = _looks_like_mediocre_request(question, query_terms)
     candidates: list[dict[str, Any]] = []
     for restaurant in restaurants:
         context = _restaurant_context(restaurant)
         searchable = _searchable_text(context)
         matched_terms = sorted(term for term in query_terms if term in searchable)
-        score = len(matched_terms) * 4
+        score = len(matched_terms) * 3
+        score += _field_match_score(context, query_terms)
         if restaurant.personal_rating:
-            score += restaurant.personal_rating
+            score += restaurant.personal_rating * (3 if broad_ranking else 1)
         if restaurant.status.value == "visited":
-            score += 2
-        if broad_ranking and restaurant.personal_rating:
-            score += restaurant.personal_rating * 2
+            score += 4 if broad_ranking else 2
+        if date_request and context.get("category") in {"date_night", "casual_dates"}:
+            score += 12
+        if date_request and _contains_any(context.get("tags"), {"date", "romantic"}):
+            score += 5
+        if mediocre_request and restaurant.personal_rating:
+            if restaurant.personal_rating <= 3:
+                score += 10
+            elif not matched_terms:
+                score -= 8
         if matched_terms or (
             broad_ranking
             and (restaurant.personal_rating or restaurant.status.value == "visited")
@@ -155,14 +184,20 @@ def _answer_with_openai(
             "or visits. Return strict JSON with keys answer and results. Results "
             "must contain restaurant_id, name, reason, and evidence. Keep the answer "
             "concise and grounded in saved notes, ratings, categories, tags, cuisine, "
-            "neighborhood, or menu items."
+            "neighborhood, or menu items. Candidate score is the local database "
+            "ranking signal; use it as guidance, but choose the best answer for the "
+            "question. For date-night or recommendation questions, favor restaurants "
+            "with higher personal_rating and date-related categories or tags. Treat "
+            "'mid' as meaning mediocre. For 'Asian food' questions, prefer the saved "
+            "Korean, Vietnamese, Thai, Chinese, Japanese, ramen, sushi, or dumpling "
+            "matches unless the user's wording clearly includes South Asian food."
         ),
         "question": question,
         "restaurants": candidates,
     }
     try:
         response = client.responses.create(
-            model=settings.openai_restaurant_model,
+            model=settings.openai_restaurant_qa_model,
             input=json.dumps(prompt),
             text={"format": {"type": "json_object"}},
         )
@@ -180,7 +215,7 @@ def _answer_with_openai(
             _clean_ai_result(result)
             for result in results
             if isinstance(result, dict)
-        ][:MAX_CANDIDATES_FOR_AI],
+        ][:MAX_ANSWER_RESULTS],
         "source": "ai",
     }
 
@@ -196,7 +231,7 @@ def _fallback_answer(question: str, candidates: list[dict[str, Any]]) -> dict[st
             "source": "local",
         }
 
-    results = [_fallback_result(candidate) for candidate in candidates[:5]]
+    results = [_fallback_result(candidate) for candidate in candidates[:MAX_ANSWER_RESULTS]]
     names = ", ".join(result["name"] for result in results[:3])
     if len(results) == 1:
         answer = f"The best saved match I found is {names}."
@@ -283,12 +318,51 @@ def _searchable_text(candidate: dict[str, Any]) -> str:
     return _clean_text(" ".join(str(part) for part in parts if part)).lower()
 
 
+def _field_match_score(candidate: dict[str, Any], query_terms: set[str]) -> int:
+    score = 0
+    high_value_fields = [
+        ("cuisine", 10),
+        ("category", 8),
+        ("tags", 6),
+        ("notes", 5),
+        ("menu_summary", 4),
+        ("neighborhood", 4),
+    ]
+    for key, weight in high_value_fields:
+        text = _clean_text(candidate.get(key)).lower()
+        score += sum(weight for term in query_terms if term in text)
+    for item in candidate.get("menu_items") or []:
+        item_text = _clean_text(
+            " ".join(
+                str(part)
+                for part in [
+                    item.get("name"),
+                    item.get("description"),
+                    " ".join(str(tag) for tag in item.get("flavor_tags") or []),
+                    " ".join(str(tag) for tag in item.get("dietary_tags") or []),
+                ]
+                if part
+            )
+        ).lower()
+        score += sum(3 for term in query_terms if term in item_text)
+    return score
+
+
+def _contains_any(value: Any, needles: set[str]) -> bool:
+    text = _clean_text(value).lower()
+    return any(needle in text for needle in needles)
+
+
 def _query_terms(question: str) -> set[str]:
-    return {
+    terms = {
         term
         for term in re.split(r"[^a-z0-9]+", question.lower())
         if len(term) > 2 and term not in STOP_WORDS
     }
+    expanded = set(terms)
+    for term in terms:
+        expanded.update(QUERY_SYNONYMS.get(term, set()))
+    return expanded
 
 
 def _looks_like_broad_ranking(question: str) -> bool:
@@ -304,6 +378,21 @@ def _looks_like_broad_ranking(question: str) -> bool:
             "recommend",
         ]
     )
+
+
+def _looks_like_date_request(question: str) -> bool:
+    lowered = question.lower()
+    return any(
+        phrase in lowered
+        for phrase in ["date", "date night", "romantic", "anniversary"]
+    )
+
+
+def _looks_like_mediocre_request(question: str, query_terms: set[str]) -> bool:
+    lowered = question.lower()
+    return bool(
+        {"mediocre", "mid", "meh", "underwhelming", "average"} & query_terms
+    ) or "not great" in lowered
 
 
 def _clean_text(value: Any) -> str:
