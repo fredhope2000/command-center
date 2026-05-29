@@ -399,6 +399,8 @@ const restaurantState = {
   menuFetches: new Set(),
   menuImports: new Set(),
   menuPollTimer: null,
+  menuStatusById: new Map(),
+  menuStatusesInitialized: false,
   menuSearch: {
     active: false,
     query: "",
@@ -506,9 +508,7 @@ function filteredRestaurants(shell) {
 function closeRestaurantDetail() {
   closeRestaurantPhotoOverlay();
   window.clearTimeout(restaurantState.autosave.timer);
-  window.clearTimeout(restaurantState.menuPollTimer);
   restaurantState.autosave.timer = null;
-  restaurantState.menuPollTimer = null;
   restaurantState.autosave.pendingForm = null;
   const panel = document.querySelector("[data-restaurant-detail]");
   if (panel) {
@@ -683,23 +683,77 @@ function restaurantMenuIsPending(restaurant) {
   return Boolean(restaurant.menu_cache?.status?.endsWith("_pending"));
 }
 
-function scheduleRestaurantMenuPoll(restaurant) {
+function scheduleRestaurantMenuPoll() {
   window.clearTimeout(restaurantState.menuPollTimer);
   restaurantState.menuPollTimer = null;
-  if (!restaurantMenuIsPending(restaurant)) {
+  if (!restaurantState.restaurants.some(restaurantMenuIsPending)) {
     return;
   }
   restaurantState.menuPollTimer = window.setTimeout(async () => {
     await loadRestaurants({ render: false });
-    const current = restaurantState.restaurants.find(
-      (item) => item.id === restaurant.id,
-    );
-    if (restaurantState.selectedId === restaurant.id && current) {
-      selectRestaurant(current.id);
-    } else {
-      renderRestaurants({ fitMap: false });
+    if (restaurantState.selectedId) {
+      const current = restaurantState.restaurants.find(
+        (item) => item.id === restaurantState.selectedId,
+      );
+      if (current) {
+        selectRestaurant(current.id);
+        return;
+      }
+      closeRestaurantDetail();
     }
   }, 2500);
+}
+
+function syncRestaurantMenuStatuses(restaurants) {
+  restaurants.forEach((restaurant) => {
+    const status = restaurant.menu_cache?.status || "";
+    const previousStatus = restaurantState.menuStatusById.get(restaurant.id);
+    if (
+      restaurantState.menuStatusesInitialized &&
+      previousStatus?.endsWith("_pending") &&
+      status &&
+      !status.endsWith("_pending")
+    ) {
+      showToast({
+        title: "Menu parsing finished",
+        message: `${restaurant.name} menu is ${status.replaceAll("_", " ")}.`,
+      });
+    }
+    restaurantState.menuStatusById.set(restaurant.id, status);
+  });
+  restaurantState.menuStatusesInitialized = true;
+}
+
+function showToast({ title, message }) {
+  let stack = document.querySelector("[data-toast-stack]");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.className = "toast-stack";
+    stack.dataset.toastStack = "";
+    document.body.append(stack);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.innerHTML = `
+    <div>
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(message)}</span>
+    </div>
+    <button type="button" aria-label="Dismiss notification">×</button>
+  `;
+  const dismiss = () => {
+    window.clearTimeout(timer);
+    toast.remove();
+    if (!stack.children.length) {
+      stack.remove();
+    } else {
+      stack.removeAttribute("hidden");
+    }
+  };
+  const timer = window.setTimeout(dismiss, 5000);
+  toast.querySelector("button")?.addEventListener("click", dismiss);
+  stack.append(toast);
 }
 
 async function searchRestaurantMenus(event) {
@@ -1304,6 +1358,8 @@ function updateRestaurantFromPayload(payload) {
   );
   if (index >= 0) {
     restaurantState.restaurants[index] = payload;
+    syncRestaurantMenuStatuses(restaurantState.restaurants);
+    scheduleRestaurantMenuPoll();
   }
 }
 
@@ -1693,6 +1749,8 @@ async function loadRestaurants(options = {}) {
   const response = await fetch("/restaurants/data");
   const payload = await response.json();
   restaurantState.restaurants = payload.restaurants || [];
+  syncRestaurantMenuStatuses(restaurantState.restaurants);
+  scheduleRestaurantMenuPoll();
   if (options.render !== false) {
     renderRestaurants();
   }

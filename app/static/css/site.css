@@ -28,6 +28,56 @@ a {
   color: inherit;
 }
 
+.toast-stack {
+  display: grid;
+  gap: 10px;
+  left: 50%;
+  max-width: min(420px, calc(100vw - 32px));
+  position: fixed;
+  top: 16px;
+  transform: translateX(-50%);
+  width: max-content;
+  z-index: 40;
+}
+
+.toast {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #b9c8be;
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(15, 39, 66, 0.18);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: min(360px, calc(100vw - 32px));
+  padding: 12px 12px 12px 14px;
+}
+
+.toast strong,
+.toast span {
+  display: block;
+}
+
+.toast span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: 2px;
+}
+
+.toast button {
+  align-items: center;
+  background: #f8faf7;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  min-height: 0;
+  padding: 0;
+  width: 28px;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 260px 1fr;
