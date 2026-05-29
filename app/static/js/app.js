@@ -398,6 +398,7 @@ const restaurantState = {
   markers: new Map(),
   menuFetches: new Set(),
   menuImports: new Set(),
+  menuPollTimer: null,
   menuSearch: {
     active: false,
     query: "",
@@ -505,7 +506,9 @@ function filteredRestaurants(shell) {
 function closeRestaurantDetail() {
   closeRestaurantPhotoOverlay();
   window.clearTimeout(restaurantState.autosave.timer);
+  window.clearTimeout(restaurantState.menuPollTimer);
   restaurantState.autosave.timer = null;
+  restaurantState.menuPollTimer = null;
   restaurantState.autosave.pendingForm = null;
   const panel = document.querySelector("[data-restaurant-detail]");
   if (panel) {
@@ -613,11 +616,14 @@ function renderRestaurantMenuCache(restaurant) {
   const cache = restaurant.menu_cache;
   const isFetching = restaurantState.menuFetches.has(restaurant.id);
   const isImporting = restaurantState.menuImports.has(restaurant.id);
+  const isPending = restaurantMenuIsPending(restaurant);
   const fetchedAt = cache?.fetched_at
     ? new Date(cache.fetched_at).toLocaleDateString()
     : null;
   const statusText = isFetching
     ? "Fetching menu..."
+    : isPending
+    ? "Parsing menu..."
     : cache
     ? [
         cache.status ? cache.status.replaceAll("_", " ") : "unknown",
@@ -648,15 +654,38 @@ function renderRestaurantMenuCache(restaurant) {
       ${summary}
       ${source}
       <div class="restaurant-menu-cache-actions">
-        <button class="ghost" type="button" data-refresh-restaurant-menu="${restaurant.id}" ${isFetching ? "disabled" : ""}>${isFetching ? "Fetching..." : "Fetch/Update Menu"}</button>
+        <button class="ghost" type="button" data-refresh-restaurant-menu="${restaurant.id}" ${isFetching || isPending ? "disabled" : ""}>${isFetching ? "Fetching..." : isPending ? "Parsing..." : "Fetch/Update Menu"}</button>
         ${viewButton}
       </div>
       <form class="restaurant-menu-import" data-restaurant-menu-import="${restaurant.id}">
-        <textarea name="extracted_text" rows="4" placeholder="Paste visible menu text"></textarea>
-        <button type="submit" ${isImporting ? "disabled" : ""}>${isImporting ? "Importing..." : "Import Text"}</button>
+        <textarea name="extracted_text" rows="4" placeholder="Paste visible menu text" ${isPending ? "disabled" : ""}></textarea>
+        <button type="submit" ${isImporting || isPending ? "disabled" : ""}>${isImporting ? "Importing..." : isPending ? "Parsing..." : "Import Text"}</button>
       </form>
     </section>
   `;
+}
+
+function restaurantMenuIsPending(restaurant) {
+  return Boolean(restaurant.menu_cache?.status?.endsWith("_pending"));
+}
+
+function scheduleRestaurantMenuPoll(restaurant) {
+  window.clearTimeout(restaurantState.menuPollTimer);
+  restaurantState.menuPollTimer = null;
+  if (!restaurantMenuIsPending(restaurant)) {
+    return;
+  }
+  restaurantState.menuPollTimer = window.setTimeout(async () => {
+    await loadRestaurants({ render: false });
+    const current = restaurantState.restaurants.find(
+      (item) => item.id === restaurant.id,
+    );
+    if (restaurantState.selectedId === restaurant.id && current) {
+      selectRestaurant(current.id);
+    } else {
+      renderRestaurants({ fitMap: false });
+    }
+  }, 2500);
 }
 
 async function searchRestaurantMenus(event) {
@@ -903,6 +932,7 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector(".restaurant-delete-form")
     ?.addEventListener("submit", deleteRestaurantDetailForm);
+  scheduleRestaurantMenuPoll(restaurant);
 }
 
 async function importRestaurantMenuText(event) {
@@ -1620,11 +1650,13 @@ async function saveRestaurantFromMapClick(shell, event) {
   }
 }
 
-async function loadRestaurants() {
+async function loadRestaurants(options = {}) {
   const response = await fetch("/restaurants/data");
   const payload = await response.json();
   restaurantState.restaurants = payload.restaurants || [];
-  renderRestaurants();
+  if (options.render !== false) {
+    renderRestaurants();
+  }
 }
 
 function initRestaurantMapWhenReady() {

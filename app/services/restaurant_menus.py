@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +15,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from app.config import settings
+from app.db import SessionLocal
 from app.models.food import Restaurant
 
 
@@ -21,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 MAX_MENU_PAGES = 6
 MAX_EXTRACTED_TEXT = 120_000
+MAX_IMPORT_TEXT = 250_000
+MAX_AI_MENU_TEXT = 45_000
+MAX_AI_OUTPUT_TOKENS = 4_000
+OPENAI_TIMEOUT_SECONDS = 24.0
+MENU_PENDING_TIMEOUT_SECONDS = 10 * 60
 REQUEST_TIMEOUT = 8.0
 MENU_LINK_RE = re.compile(r"\b(menu|food|dinner|lunch|brunch|breakfast)\b", re.I)
 MENU_FETCH_HEADERS = {
@@ -137,48 +144,18 @@ def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
             status="fetched_without_ai",
             error_message="OPENAI_API_KEY is not configured.",
         )
-    try:
-        structured_json = _structure_menu_with_openai(
-            restaurant, extracted.extracted_text
-        )
-    except Exception as exc:
-        logger.exception(
-            "Restaurant menu AI structuring failed",
-            extra={
-                "restaurant_id": restaurant.id,
-                "restaurant_name": restaurant.name,
-                "source_url": extracted.source_url,
-            },
-        )
-        return MenuFetchResult(
-            source_url=extracted.source_url,
-            extracted_text=extracted.extracted_text,
-            structured_json=_fallback_structure(restaurant, extracted.extracted_text),
-            status="fetched_without_ai",
-            error_message=f"AI menu structuring failed: {exc}",
-        )
-    logger.info(
-        "Restaurant menu refresh completed",
-        extra={
-            "restaurant_id": restaurant.id,
-            "restaurant_name": restaurant.name,
-            "source_url": extracted.source_url,
-            "text_length": len(extracted.extracted_text),
-            "item_count": len(structured_json.get("items") or []),
-        },
-    )
     return MenuFetchResult(
         source_url=extracted.source_url,
         extracted_text=extracted.extracted_text,
-        structured_json=structured_json,
-        status="fetched",
+        structured_json=_pending_structure("Parsing fetched menu with AI."),
+        status="fetch_pending",
     )
 
 
 def import_menu_text_for_restaurant(
     restaurant: Restaurant, source_url: str | None, extracted_text: str
 ) -> MenuFetchResult:
-    text = _clean_text(extracted_text)[:MAX_EXTRACTED_TEXT]
+    text = _clean_text(extracted_text[:MAX_IMPORT_TEXT])[:MAX_EXTRACTED_TEXT]
     if not text:
         return MenuFetchResult(
             source_url=source_url,
@@ -195,29 +172,11 @@ def import_menu_text_for_restaurant(
             status="imported_without_ai",
             error_message="OPENAI_API_KEY is not configured.",
         )
-    try:
-        structured_json = _structure_menu_with_openai(restaurant, text)
-    except Exception as exc:
-        logger.exception(
-            "Restaurant imported menu AI structuring failed",
-            extra={
-                "restaurant_id": restaurant.id,
-                "restaurant_name": restaurant.name,
-                "source_url": source_url,
-            },
-        )
-        return MenuFetchResult(
-            source_url=source_url,
-            extracted_text=text,
-            structured_json=_fallback_structure(restaurant, text),
-            status="imported_without_ai",
-            error_message=f"AI menu structuring failed: {exc}",
-        )
     return MenuFetchResult(
         source_url=source_url,
         extracted_text=text,
-        structured_json=structured_json,
-        status="imported",
+        structured_json=_pending_structure("Parsing imported menu with AI."),
+        status="import_pending",
     )
 
 
@@ -451,6 +410,10 @@ def _fallback_structure(restaurant: Restaurant, text: str) -> dict[str, Any]:
     }
 
 
+def _pending_structure(summary: str) -> dict[str, Any]:
+    return {"summary": summary, "items": []}
+
+
 def _simple_tags(text: str) -> list[str]:
     tags = [
         "smoky",
@@ -473,7 +436,11 @@ def _structure_menu_with_openai(restaurant: Restaurant, text: str) -> dict[str, 
     except ImportError as exc:
         raise RuntimeError("Install the openai package before using production AI.") from exc
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = OpenAI(
+        api_key=settings.openai_api_key,
+        timeout=OPENAI_TIMEOUT_SECONDS,
+    )
+    ai_text = _prepare_menu_text_for_ai(text)
     prompt = {
         "restaurant": restaurant.custom_name or restaurant.name,
         "instructions": (
@@ -481,16 +448,33 @@ def _structure_menu_with_openai(restaurant: Restaurant, text: str) -> dict[str, 
             "with keys summary and items. Each item must have name, description, "
             "category, flavor_tags, dietary_tags, confidence. Do not invent dishes."
         ),
-        "menu_text": text,
+        "menu_text": ai_text,
     }
     response = client.responses.create(
         model=settings.openai_restaurant_model,
         input=json.dumps(prompt),
+        max_output_tokens=MAX_AI_OUTPUT_TOKENS,
     )
     parsed = _parse_json_output(getattr(response, "output_text", ""))
     if not isinstance(parsed, dict) or not isinstance(parsed.get("items"), list):
         raise ValueError("OpenAI returned an unexpected menu JSON shape.")
     return parsed
+
+
+def _prepare_menu_text_for_ai(text: str) -> str:
+    seen: set[str] = set()
+    lines: list[str] = []
+    for line in re.split(r"[\r\n]+", text):
+        clean_line = _clean_text(line)
+        if not clean_line or clean_line in seen:
+            continue
+        seen.add(clean_line)
+        lines.append(clean_line)
+        if sum(len(item) for item in lines) >= MAX_AI_MENU_TEXT:
+            break
+    if not lines:
+        return text[:MAX_AI_MENU_TEXT]
+    return "\n".join(lines)[:MAX_AI_MENU_TEXT]
 
 
 def _clean_text(text: str) -> str:
@@ -535,12 +519,82 @@ def apply_menu_result(restaurant: Restaurant, result: MenuFetchResult) -> None:
     cache.status = result.status
     cache.error_message = result.error_message
     cache.fetched_at = now if result.status not in {"failed"} else cache.fetched_at
-    if result.extracted_text and result.status not in {"failed"}:
+    if result.extracted_text and _is_successful_menu_status(result.status):
         cache.last_success_status = result.status
         cache.last_success_source_url = result.source_url
         cache.last_success_at = now
     cache.updated_at = now
     restaurant.menu_cache = cache
+
+
+def queue_menu_ai_structure(restaurant_id: int, success_status: str) -> None:
+    thread = threading.Thread(
+        target=_structure_menu_background,
+        args=(restaurant_id, success_status),
+        daemon=True,
+    )
+    thread.start()
+
+
+def _structure_menu_background(restaurant_id: int, success_status: str) -> None:
+    with SessionLocal() as session:
+        restaurant = session.get(Restaurant, restaurant_id)
+        if restaurant is None or restaurant.menu_cache is None:
+            return
+        cache = restaurant.menu_cache
+        text = cache.extracted_text or ""
+        if not text:
+            cache.status = "failed"
+            cache.error_message = "No menu text was available for AI parsing."
+            session.commit()
+            return
+        try:
+            structured_json = _structure_menu_with_openai(restaurant, text)
+            cache.structured_json = structured_json
+            cache.status = success_status
+            cache.error_message = None
+        except Exception as exc:
+            logger.exception(
+                "Restaurant menu background AI structuring failed",
+                extra={
+                    "restaurant_id": restaurant.id,
+                    "restaurant_name": restaurant.name,
+                    "source_url": cache.source_url,
+                },
+            )
+            cache.structured_json = _fallback_structure(restaurant, text)
+            cache.status = _without_ai_status(success_status)
+            cache.error_message = f"AI menu structuring failed: {exc}"
+        now = datetime.utcnow()
+        cache.last_success_status = cache.status
+        cache.last_success_source_url = cache.source_url
+        cache.last_success_at = now
+        cache.fetched_at = now
+        cache.updated_at = now
+        session.commit()
+
+
+def _is_successful_menu_status(status: str) -> bool:
+    return status != "failed" and not status.endswith("_pending")
+
+
+def _without_ai_status(success_status: str) -> str:
+    return {
+        "fetched": "fetched_without_ai",
+        "imported": "imported_without_ai",
+    }.get(success_status, "fetched_without_ai")
+
+
+def menu_cache_is_pending(restaurant: Restaurant) -> bool:
+    cache = restaurant.menu_cache
+    return bool(cache and cache.status.endswith("_pending"))
+
+
+def menu_cache_pending_is_stale(restaurant: Restaurant) -> bool:
+    cache = restaurant.menu_cache
+    if cache is None or not cache.status.endswith("_pending") or cache.updated_at is None:
+        return False
+    return (datetime.utcnow() - cache.updated_at).total_seconds() > MENU_PENDING_TIMEOUT_SECONDS
 
 
 def search_restaurant_menus(

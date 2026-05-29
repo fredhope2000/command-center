@@ -23,7 +23,10 @@ from app.services.restaurant_photos import (
 from app.services.restaurant_menus import (
     apply_menu_result,
     import_menu_text_for_restaurant,
+    menu_cache_is_pending,
+    menu_cache_pending_is_stale,
     menu_cache_payload,
+    queue_menu_ai_structure,
     refresh_menu_for_restaurant,
     search_restaurant_menus,
 )
@@ -280,6 +283,11 @@ def add_restaurant_photo(
     restaurant = db.get(Restaurant, restaurant_id)
     if restaurant is None:
         return JSONResponse({"error": "Restaurant not found."}, status_code=404)
+    if menu_cache_is_pending(restaurant) and not menu_cache_pending_is_stale(restaurant):
+        return JSONResponse(
+            {"error": "Menu parsing is already in progress."},
+            status_code=409,
+        )
 
     try:
         uploaded = upload_restaurant_photo(photo, restaurant_id)
@@ -349,6 +357,8 @@ def refresh_restaurant_menu(
     db.add(restaurant)
     db.commit()
     db.refresh(restaurant)
+    if result.status == "fetch_pending":
+        queue_menu_ai_structure(restaurant.id, "fetched")
     return JSONResponse({"restaurant": _restaurant_payload(restaurant)})
 
 
@@ -391,6 +401,11 @@ async def import_restaurant_menu(
     restaurant = db.get(Restaurant, restaurant_id)
     if restaurant is None:
         return JSONResponse({"error": "Restaurant not found."}, status_code=404)
+    if menu_cache_is_pending(restaurant) and not menu_cache_pending_is_stale(restaurant):
+        return JSONResponse(
+            {"error": "Menu parsing is already in progress."},
+            status_code=409,
+        )
 
     payload = await request.json()
     extracted_text = _clean(payload.get("extracted_text"))
@@ -408,6 +423,8 @@ async def import_restaurant_menu(
     db.add(restaurant)
     db.commit()
     db.refresh(restaurant)
+    if result.status == "import_pending":
+        queue_menu_ai_structure(restaurant.id, "imported")
     return JSONResponse({"restaurant": _restaurant_payload(restaurant)})
 
 

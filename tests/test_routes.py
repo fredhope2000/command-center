@@ -762,6 +762,79 @@ def test_restaurant_menu_text_can_be_imported(client: TestClient) -> None:
     assert "Smoky brisket noodles" in menu_response.json()["extracted_text"]
 
 
+def test_restaurant_menu_import_is_blocked_while_pending(client: TestClient) -> None:
+    from sqlalchemy import text
+
+    from app.db import engine
+
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "pending-menu-place-1",
+            "name": "Pending Menu Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    client.post("/restaurants/1/menu/import", json={"extracted_text": "Noodles"})
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE restaurant_menu_caches "
+                "SET status = 'import_pending', updated_at = CURRENT_TIMESTAMP "
+                "WHERE restaurant_id = 1"
+            )
+        )
+
+    response = client.post(
+        "/restaurants/1/menu/import",
+        json={"extracted_text": "New menu"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "Menu parsing is already in progress."
+
+
+def test_stale_restaurant_menu_pending_state_can_be_overwritten(
+    client: TestClient,
+) -> None:
+    from sqlalchemy import text
+
+    from app.db import engine
+
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "stale-menu-place-1",
+            "name": "Stale Menu Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    client.post("/restaurants/1/menu/import", json={"extracted_text": "Old menu"})
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE restaurant_menu_caches "
+                "SET status = 'import_pending', "
+                "updated_at = datetime('now', '-20 minutes') "
+                "WHERE restaurant_id = 1"
+            )
+        )
+
+    response = client.post(
+        "/restaurants/1/menu/import",
+        json={"extracted_text": "New crispy noodles"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["restaurant"]["menu_cache"]["status"] == (
+        "imported_without_ai"
+    )
+
+
 def test_failed_restaurant_menu_refresh_keeps_existing_cache_data(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
