@@ -22,6 +22,7 @@ from app.services.restaurant_photos import (
 )
 from app.services.restaurant_menus import (
     apply_menu_result,
+    import_menu_text_for_restaurant,
     menu_cache_payload,
     refresh_menu_for_restaurant,
     search_restaurant_menus,
@@ -365,10 +366,70 @@ def restaurant_menu_data(
     return {
         "restaurant_id": restaurant.id,
         "restaurant_name": restaurant.custom_name or restaurant.name,
-        "status": cache.status,
-        "source_url": cache.source_url,
-        "fetched_at": cache.fetched_at.isoformat() if cache.fetched_at else None,
+        "status": cache.last_success_status or cache.status,
+        "source_url": cache.last_success_source_url or cache.source_url,
+        "fetched_at": (
+            cache.last_success_at.isoformat()
+            if cache.last_success_at
+            else cache.fetched_at.isoformat()
+            if cache.fetched_at
+            else None
+        ),
+        "latest_status": cache.status,
         "error_message": cache.error_message,
         "extracted_text": cache.extracted_text or "",
         "structured_json": cache.structured_json or {},
     }
+
+
+@router.post("/{restaurant_id}/menu/import")
+async def import_restaurant_menu(
+    request: Request,
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    restaurant = db.get(Restaurant, restaurant_id)
+    if restaurant is None:
+        return JSONResponse({"error": "Restaurant not found."}, status_code=404)
+
+    payload = await request.json()
+    extracted_text = _clean(payload.get("extracted_text"))
+    if extracted_text is None:
+        return JSONResponse({"error": "Menu text is required."}, status_code=400)
+
+    result = import_menu_text_for_restaurant(
+        restaurant,
+        source_url=_clean(payload.get("source_url")) or restaurant.menu_url,
+        extracted_text=extracted_text,
+    )
+    apply_menu_result(restaurant, result)
+    if result.source_url:
+        restaurant.menu_url = result.source_url
+    db.add(restaurant)
+    db.commit()
+    db.refresh(restaurant)
+    return JSONResponse({"restaurant": _restaurant_payload(restaurant)})
+
+
+@router.post("/{restaurant_id}/menu/error/clear")
+def clear_restaurant_menu_error(
+    restaurant_id: int,
+    db: Session = Depends(get_db),
+):
+    restaurant = db.get(Restaurant, restaurant_id)
+    if restaurant is None:
+        return JSONResponse({"error": "Restaurant not found."}, status_code=404)
+    cache = restaurant.menu_cache
+    if cache is None:
+        return JSONResponse({"error": "No menu cache found."}, status_code=404)
+
+    if cache.last_success_status:
+        cache.status = cache.last_success_status
+        cache.source_url = cache.last_success_source_url or cache.source_url
+        cache.fetched_at = cache.last_success_at or cache.fetched_at
+    elif cache.extracted_text:
+        cache.status = "cached"
+    cache.error_message = None
+    db.commit()
+    db.refresh(restaurant)
+    return JSONResponse({"restaurant": _restaurant_payload(restaurant)})

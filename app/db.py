@@ -116,3 +116,31 @@ def _ensure_lightweight_schema_updates() -> None:
                     "WHERE status = 'SKIP'"
                 )
             )
+
+        menu_cache_columns = {
+            row[1]
+            for row in connection.execute(
+                text("PRAGMA table_info(restaurant_menu_caches)")
+            )
+        }
+        if menu_cache_columns and "last_success_status" not in menu_cache_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE restaurant_menu_caches "
+                    "ADD COLUMN last_success_status VARCHAR"
+                )
+            )
+        if menu_cache_columns and "last_success_source_url" not in menu_cache_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE restaurant_menu_caches "
+                    "ADD COLUMN last_success_source_url VARCHAR"
+                )
+            )
+        if menu_cache_columns and "last_success_at" not in menu_cache_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE restaurant_menu_caches "
+                    "ADD COLUMN last_success_at DATETIME"
+                )
+            )

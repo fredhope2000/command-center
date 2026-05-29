@@ -29,8 +29,11 @@
           Craving
           <input name="query" placeholder="Smoky, crispy, bright, comforting">
         </label>
-        <button type="submit">Find</button>
-        <div class="restaurant-menu-results" data-restaurant-menu-results hidden></div>
+        <div class="restaurant-craving-actions">
+          <button type="submit">Find</button>
+          <button class="ghost" type="button" data-clear-restaurant-menu-search hidden>Clear</button>
+        </div>
+        <span class="restaurant-craving-status" data-restaurant-menu-search-status hidden></span>
       </form>
 
       <div class="restaurant-filters" data-restaurant-filters>

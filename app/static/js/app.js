@@ -397,6 +397,12 @@ const restaurantState = {
   restaurants: [],
   markers: new Map(),
   menuFetches: new Set(),
+  menuImports: new Set(),
+  menuSearch: {
+    active: false,
+    query: "",
+    resultsById: new Map(),
+  },
   autosave: {
     timer: null,
     pendingForm: null,
@@ -474,7 +480,7 @@ function filteredRestaurants(shell) {
     shell.querySelector("[data-restaurant-rating-filter]")?.value || 0,
   );
 
-  return restaurantState.restaurants.filter((restaurant) => {
+  const restaurants = restaurantState.restaurants.filter((restaurant) => {
     const statusMatches = !statusFilter || restaurant.status === statusFilter;
     const categoryMatches =
       !categoryFilter || restaurant.category === categoryFilter;
@@ -484,6 +490,16 @@ function filteredRestaurants(shell) {
       !textFilter || restaurantSearchText(restaurant).includes(textFilter);
     return statusMatches && categoryMatches && ratingMatches && textMatches;
   });
+  if (!restaurantState.menuSearch.active) {
+    return restaurants;
+  }
+  return restaurants
+    .filter((restaurant) => restaurantState.menuSearch.resultsById.has(restaurant.id))
+    .sort((a, b) => {
+      const aResult = restaurantState.menuSearch.resultsById.get(a.id);
+      const bResult = restaurantState.menuSearch.resultsById.get(b.id);
+      return Number(bResult?.score || 0) - Number(aResult?.score || 0);
+    });
 }
 
 function closeRestaurantDetail() {
@@ -596,6 +612,7 @@ function renderRestaurantPhotos(restaurant) {
 function renderRestaurantMenuCache(restaurant) {
   const cache = restaurant.menu_cache;
   const isFetching = restaurantState.menuFetches.has(restaurant.id);
+  const isImporting = restaurantState.menuImports.has(restaurant.id);
   const fetchedAt = cache?.fetched_at
     ? new Date(cache.fetched_at).toLocaleDateString()
     : null;
@@ -618,7 +635,7 @@ function renderRestaurantMenuCache(restaurant) {
   const source = cache?.source_url
     ? `<small>Source: <a href="${escapeHtml(cache.source_url)}" target="_blank" rel="noreferrer">${escapeHtml(cache.source_url)}</a></small>`
     : "";
-  const viewButton = cache
+  const viewButton = cache?.has_data
     ? `<button class="ghost" type="button" data-view-restaurant-menu="${restaurant.id}">View Menu Data</button>`
     : "";
 
@@ -631,43 +648,15 @@ function renderRestaurantMenuCache(restaurant) {
       ${summary}
       ${source}
       <div class="restaurant-menu-cache-actions">
-      <button class="ghost" type="button" data-refresh-restaurant-menu="${restaurant.id}" ${isFetching ? "disabled" : ""}>${isFetching ? "Fetching..." : "Fetch/Update Menu"}</button>
-      ${viewButton}
-    </div>
+        <button class="ghost" type="button" data-refresh-restaurant-menu="${restaurant.id}" ${isFetching ? "disabled" : ""}>${isFetching ? "Fetching..." : "Fetch/Update Menu"}</button>
+        ${viewButton}
+      </div>
+      <form class="restaurant-menu-import" data-restaurant-menu-import="${restaurant.id}">
+        <textarea name="extracted_text" rows="4" placeholder="Paste visible menu text"></textarea>
+        <button type="submit" ${isImporting ? "disabled" : ""}>${isImporting ? "Importing..." : "Import Text"}</button>
+      </form>
     </section>
   `;
-}
-
-function renderRestaurantMenuSearchResults(shell, results, query) {
-  const container = shell.querySelector("[data-restaurant-menu-results]");
-  if (!container) {
-    return;
-  }
-  container.hidden = false;
-  container.innerHTML = "";
-  if (!results.length) {
-    const empty = document.createElement("span");
-    empty.className = "empty";
-    empty.textContent = query
-      ? "No cached menus match."
-      : "Enter a craving to search cached menus.";
-    container.append(empty);
-    return;
-  }
-
-  results.forEach((result) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "restaurant-menu-result";
-    button.innerHTML = `
-      <strong>${escapeHtml(result.name || "Restaurant")}</strong>
-      <span>${escapeHtml(result.reason || "Cached menu match.")}</span>
-    `;
-    button.addEventListener("click", () => {
-      selectRestaurant(Number(result.restaurant_id));
-    });
-    container.append(button);
-  });
 }
 
 async function searchRestaurantMenus(event) {
@@ -681,12 +670,13 @@ async function searchRestaurantMenus(event) {
     return;
   }
   if (!query) {
-    renderRestaurantMenuSearchResults(shell, [], query);
+    clearRestaurantMenuSearch(shell);
     return;
   }
 
   if (submitButton) {
     submitButton.disabled = true;
+    submitButton.textContent = "Finding...";
   }
   try {
     const response = await fetch("/restaurants/menu/search", {
@@ -701,12 +691,48 @@ async function searchRestaurantMenus(event) {
     if (!response.ok) {
       throw new Error(payload.error || "Could not search menus.");
     }
-    renderRestaurantMenuSearchResults(shell, payload.results || [], query);
+    restaurantState.menuSearch.active = true;
+    restaurantState.menuSearch.query = query;
+    restaurantState.menuSearch.resultsById = new Map(
+      (payload.results || []).map((result) => [Number(result.restaurant_id), result]),
+    );
+    updateRestaurantMenuSearchState(shell);
+    renderRestaurants({ fitMap: true });
   } finally {
     if (submitButton) {
       submitButton.disabled = false;
+      submitButton.textContent = "Find";
     }
   }
+}
+
+function clearRestaurantMenuSearch(shell) {
+  restaurantState.menuSearch.active = false;
+  restaurantState.menuSearch.query = "";
+  restaurantState.menuSearch.resultsById = new Map();
+  const form = shell.querySelector("[data-restaurant-menu-search]");
+  form?.reset();
+  updateRestaurantMenuSearchState(shell);
+  renderRestaurants({ fitMap: true });
+}
+
+function updateRestaurantMenuSearchState(shell) {
+  const status = shell.querySelector("[data-restaurant-menu-search-status]");
+  const clearButton = shell.querySelector("[data-clear-restaurant-menu-search]");
+  if (clearButton) {
+    clearButton.hidden = !restaurantState.menuSearch.active;
+  }
+  if (!status) {
+    return;
+  }
+  if (!restaurantState.menuSearch.active) {
+    status.hidden = true;
+    status.textContent = "";
+    return;
+  }
+  const count = restaurantState.menuSearch.resultsById.size;
+  status.hidden = false;
+  status.textContent = `${count} ${count === 1 ? "match" : "matches"} for ${restaurantState.menuSearch.query}`;
 }
 
 function selectRestaurant(restaurantId) {
@@ -868,12 +894,54 @@ function selectRestaurant(restaurantId) {
   panel
     .querySelector("[data-view-restaurant-menu]")
     ?.addEventListener("click", viewRestaurantMenuData);
+  panel
+    .querySelector("[data-restaurant-menu-import]")
+    ?.addEventListener("submit", importRestaurantMenuText);
   panel.addEventListener("click", handleRestaurantPhotoPreviewClick);
   panel.addEventListener("click", handleRestaurantPhotoDeleteClick);
   wireConfirmDeleteForms();
   panel
     .querySelector(".restaurant-delete-form")
     ?.addEventListener("submit", deleteRestaurantDetailForm);
+}
+
+async function importRestaurantMenuText(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const restaurantId = Number(form.dataset.restaurantMenuImport);
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (!restaurantId) {
+    return;
+  }
+  restaurantState.menuImports.add(restaurantId);
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Importing...";
+  }
+  try {
+    const formData = new FormData(form);
+    const response = await fetch(`/restaurants/${restaurantId}/menu/import`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        extracted_text: formData.get("extracted_text"),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not import menu text.");
+    }
+    updateRestaurantFromPayload(payload.restaurant);
+    selectRestaurant(payload.restaurant.id);
+  } finally {
+    restaurantState.menuImports.delete(restaurantId);
+    if (restaurantState.selectedId === restaurantId) {
+      selectRestaurant(restaurantId);
+    }
+  }
 }
 
 async function viewRestaurantMenuData(event) {
@@ -913,7 +981,10 @@ function showRestaurantMenuDataOverlay(payload) {
       }
       ${
         payload.error_message
-          ? `<p class="restaurant-menu-data-error">${escapeHtml(payload.error_message)}</p>`
+          ? `<div class="restaurant-menu-data-error">
+              <span>Latest update ${escapeHtml(payload.latest_status || "failed")}: ${escapeHtml(payload.error_message)}</span>
+              <button type="button" data-clear-restaurant-menu-error="${payload.restaurant_id}">Clear</button>
+            </div>`
           : ""
       }
       <div class="restaurant-menu-data-columns">
@@ -950,6 +1021,13 @@ function showRestaurantMenuDataOverlay(payload) {
     </div>
   `;
   overlay.addEventListener("click", (overlayEvent) => {
+    const clearButton = overlayEvent.target.closest(
+      "[data-clear-restaurant-menu-error]",
+    );
+    if (clearButton) {
+      clearRestaurantMenuError(clearButton);
+      return;
+    }
     if (
       overlayEvent.target === overlay ||
       overlayEvent.target.closest(".restaurant-menu-data-close")
@@ -962,6 +1040,29 @@ function showRestaurantMenuDataOverlay(payload) {
 
 function closeRestaurantMenuDataOverlay() {
   document.querySelector("[data-restaurant-menu-data-overlay]")?.remove();
+}
+
+async function clearRestaurantMenuError(button) {
+  const restaurantId = Number(button.dataset.clearRestaurantMenuError);
+  if (!restaurantId) {
+    return;
+  }
+  button.disabled = true;
+  try {
+    const response = await fetch(`/restaurants/${restaurantId}/menu/error/clear`, {
+      method: "POST",
+      headers: { Accept: "application/json" },
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not clear menu error.");
+    }
+    updateRestaurantFromPayload(payload.restaurant);
+    closeRestaurantMenuDataOverlay();
+    selectRestaurant(payload.restaurant.id);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function refreshRestaurantMenu(event) {
@@ -1280,6 +1381,9 @@ function renderRestaurantList(shell, restaurants) {
   }
 
   restaurants.forEach((restaurant) => {
+    const menuMatch = restaurantState.menuSearch.active
+      ? restaurantState.menuSearch.resultsById.get(restaurant.id)
+      : null;
     const button = document.createElement("button");
     button.type = "button";
     button.className = "restaurant-list-item";
@@ -1290,6 +1394,11 @@ function renderRestaurantList(shell, restaurants) {
         ${
           restaurant.neighborhood || restaurant.formatted_address
             ? `<small>${escapeHtml(restaurant.neighborhood || restaurant.formatted_address)}</small>`
+            : ""
+        }
+        ${
+          menuMatch?.reason
+            ? `<small class="restaurant-menu-match">${escapeHtml(menuMatch.reason)}</small>`
             : ""
         }
       </span>
@@ -1569,6 +1678,9 @@ function wireRestaurantMap() {
   shell
     .querySelector("[data-restaurant-menu-search]")
     ?.addEventListener("submit", searchRestaurantMenus);
+  shell
+    .querySelector("[data-clear-restaurant-menu-search]")
+    ?.addEventListener("click", () => clearRestaurantMenuSearch(shell));
   shell
     .querySelector("[data-collapse-restaurant-controls]")
     ?.addEventListener("click", () => setRestaurantControlsCollapsed(shell, true));

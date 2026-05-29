@@ -175,6 +175,52 @@ def refresh_menu_for_restaurant(restaurant: Restaurant) -> MenuFetchResult:
     )
 
 
+def import_menu_text_for_restaurant(
+    restaurant: Restaurant, source_url: str | None, extracted_text: str
+) -> MenuFetchResult:
+    text = _clean_text(extracted_text)[:MAX_EXTRACTED_TEXT]
+    if not text:
+        return MenuFetchResult(
+            source_url=source_url,
+            extracted_text="",
+            structured_json={"items": [], "summary": "No menu text imported."},
+            status="failed",
+            error_message="Imported menu text is empty.",
+        )
+    if not settings.restaurant_ai_enabled:
+        return MenuFetchResult(
+            source_url=source_url,
+            extracted_text=text,
+            structured_json=_fallback_structure(restaurant, text),
+            status="imported_without_ai",
+            error_message="OPENAI_API_KEY is not configured.",
+        )
+    try:
+        structured_json = _structure_menu_with_openai(restaurant, text)
+    except Exception as exc:
+        logger.exception(
+            "Restaurant imported menu AI structuring failed",
+            extra={
+                "restaurant_id": restaurant.id,
+                "restaurant_name": restaurant.name,
+                "source_url": source_url,
+            },
+        )
+        return MenuFetchResult(
+            source_url=source_url,
+            extracted_text=text,
+            structured_json=_fallback_structure(restaurant, text),
+            status="imported_without_ai",
+            error_message=f"AI menu structuring failed: {exc}",
+        )
+    return MenuFetchResult(
+        source_url=source_url,
+        extracted_text=text,
+        structured_json=structured_json,
+        status="imported",
+    )
+
+
 def _fetch_menu_text(website_url: str) -> MenuFetchResult:
     fetch_errors: list[str] = []
     try:
@@ -464,6 +510,7 @@ def menu_cache_payload(restaurant: Restaurant) -> dict[str, Any] | None:
         if cache.status == "failed" and cache.error_message
         else (cache.structured_json or {}).get("summary"),
         "item_count": len((cache.structured_json or {}).get("items") or []),
+        "has_data": bool(cache.extracted_text),
     }
 
 
@@ -474,6 +521,13 @@ def apply_menu_result(restaurant: Restaurant, result: MenuFetchResult) -> None:
     now = datetime.utcnow()
     if cache is None:
         cache = RestaurantMenuCache(restaurant=restaurant)
+    if result.status == "failed" and cache.extracted_text:
+        cache.status = result.status
+        cache.error_message = result.error_message
+        cache.source_url = result.source_url or cache.source_url
+        cache.updated_at = now
+        restaurant.menu_cache = cache
+        return
     cache.source_url = result.source_url
     cache.extracted_text = result.extracted_text
     cache.structured_json = result.structured_json
@@ -481,6 +535,10 @@ def apply_menu_result(restaurant: Restaurant, result: MenuFetchResult) -> None:
     cache.status = result.status
     cache.error_message = result.error_message
     cache.fetched_at = now if result.status not in {"failed"} else cache.fetched_at
+    if result.extracted_text and result.status not in {"failed"}:
+        cache.last_success_status = result.status
+        cache.last_success_source_url = result.source_url
+        cache.last_success_at = now
     cache.updated_at = now
     restaurant.menu_cache = cache
 
@@ -529,19 +587,34 @@ def _simple_menu_search(
     results: list[dict[str, Any]] = []
     for candidate in candidates:
         matches: list[str] = []
+        evidence: list[dict[str, Any]] = []
         score = 0
         searchable_parts = [candidate.get("summary") or ""]
         for item in candidate["items"]:
             if not isinstance(item, dict):
                 continue
+            item_parts = [
+                str(item.get("name") or ""),
+                str(item.get("description") or ""),
+                " ".join(str(tag) for tag in item.get("flavor_tags") or []),
+                " ".join(str(tag) for tag in item.get("dietary_tags") or []),
+            ]
             searchable_parts.extend(
-                [
-                    str(item.get("name") or ""),
-                    str(item.get("description") or ""),
-                    " ".join(str(tag) for tag in item.get("flavor_tags") or []),
-                    " ".join(str(tag) for tag in item.get("dietary_tags") or []),
-                ]
+                item_parts
             )
+            item_text = " ".join(item_parts).lower()
+            matched_terms = sorted(term for term in query_terms if term in item_text)
+            if normalized_query in item_text:
+                matched_terms.append(normalized_query)
+            if matched_terms:
+                evidence.append(
+                    {
+                        "name": item.get("name"),
+                        "description": item.get("description"),
+                        "flavor_tags": item.get("flavor_tags") or [],
+                        "matched_terms": sorted(set(matched_terms)),
+                    }
+                )
         searchable = " ".join(searchable_parts).lower()
         for term in query_terms:
             if term in searchable:
@@ -555,8 +628,9 @@ def _simple_menu_search(
                     "restaurant_id": candidate["restaurant_id"],
                     "name": candidate["name"],
                     "score": score,
-                    "reason": f"Cached menu matches: {', '.join(matches[:5])}.",
+                    "reason": _menu_match_reason(candidate, evidence, matches),
                     "matched_terms": matches[:5],
+                    "evidence": evidence[:5],
                 }
             )
     return sorted(results, key=lambda result: result["score"], reverse=True)
@@ -578,7 +652,10 @@ def _rerank_menu_search_with_openai(
             "Rerank saved restaurant menu search results for the user's craving. "
             "Return only JSON with key results. Each result must include "
             "restaurant_id, name, score from 0 to 1, reason, matched_terms. "
-            "Use only the supplied candidates."
+            "Use only the supplied candidates and their evidence. The reason should "
+            "be one concise plain-English sentence grounded in specific dishes, "
+            "descriptions, or flavor tags. Do not use generic boilerplate like "
+            "'menu match for the craving term'. Do not invent menu items."
         ),
         "query": normalized_query,
         "candidates": simple_results,
@@ -595,6 +672,38 @@ def _rerank_menu_search_with_openai(
     if not isinstance(results, list):
         return simple_results
     return results[:8]
+
+
+def _menu_match_reason(
+    candidate: dict[str, Any],
+    evidence: list[dict[str, Any]],
+    matches: list[str],
+) -> str:
+    if evidence:
+        item_names = [
+            str(item.get("name")).strip()
+            for item in evidence
+            if str(item.get("name") or "").strip()
+        ][:3]
+        tags = sorted(
+            {
+                str(tag).strip()
+                for item in evidence
+                for tag in item.get("flavor_tags", [])
+                if str(tag).strip()
+            }
+        )[:4]
+        if item_names and tags:
+            return (
+                f"Menu evidence includes {', '.join(item_names)} with "
+                f"{', '.join(tags)} flavors."
+            )
+        if item_names:
+            return f"Menu evidence includes {', '.join(item_names)}."
+    summary = str(candidate.get("summary") or "").strip()
+    if summary:
+        return summary[:180]
+    return f"Cached menu includes {', '.join(matches[:5])}."
 
 
 def _parse_json_output(output_text: str) -> dict[str, Any]:

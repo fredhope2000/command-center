@@ -692,6 +692,7 @@ def test_restaurant_menu_refresh_uses_dev_mock_cache(client: TestClient) -> None
     assert restaurant["menu_cache"]["status"] == "mocked"
     assert restaurant["menu_cache"]["source_url"] == "https://example.test/direct-menu"
     assert restaurant["menu_cache"]["item_count"] == 2
+    assert restaurant["menu_cache"]["has_data"] is True
     assert restaurant["menu_cache"]["summary"] == (
         "Development mock menu generated without AI."
     )
@@ -725,6 +726,141 @@ def test_restaurant_menu_search_uses_cached_menu_data(client: TestClient) -> Non
     assert results[0]["restaurant_id"] == 1
     assert results[0]["name"] == "Search Menu Cafe"
     assert "smoky" in results[0]["matched_terms"]
+    assert "Smoky grilled vegetables" in results[0]["reason"]
+    assert results[0]["evidence"][0]["name"] == "Smoky grilled vegetables"
+
+
+def test_restaurant_menu_text_can_be_imported(client: TestClient) -> None:
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "import-menu-place-1",
+            "name": "Import Menu Cafe",
+            "menu_url": "https://order.example.test/import-menu",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+
+    response = client.post(
+        "/restaurants/1/menu/import",
+        json={
+            "extracted_text": "Smoky brisket noodles\nCrispy garlic rice",
+        },
+    )
+
+    assert response.status_code == 200
+    restaurant = response.json()["restaurant"]
+    assert restaurant["menu_url"] == "https://order.example.test/import-menu"
+    assert restaurant["menu_cache"]["status"] == "imported_without_ai"
+    assert restaurant["menu_cache"]["source_url"] == (
+        "https://order.example.test/import-menu"
+    )
+
+    menu_response = client.get("/restaurants/1/menu")
+    assert menu_response.status_code == 200
+    assert "Smoky brisket noodles" in menu_response.json()["extracted_text"]
+
+
+def test_failed_restaurant_menu_refresh_keeps_existing_cache_data(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.routes import restaurants as restaurant_routes
+    from app.services.restaurant_menus import MenuFetchResult
+
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "menu-fail-place-1",
+            "name": "Menu Fail Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    client.post(
+        "/restaurants/1/menu/import",
+        json={
+            "source_url": "https://example.test/menu",
+            "extracted_text": "Smoky noodles",
+        },
+    )
+
+    def fake_refresh(_restaurant):
+        return MenuFetchResult(
+            source_url="https://example.test/blocked",
+            extracted_text="",
+            structured_json={"items": [], "summary": "Blocked"},
+            status="failed",
+            error_message="HTTP 403 Forbidden",
+        )
+
+    monkeypatch.setattr(restaurant_routes, "refresh_menu_for_restaurant", fake_refresh)
+    refresh_response = client.post("/restaurants/1/menu/refresh")
+
+    assert refresh_response.status_code == 200
+    cache = refresh_response.json()["restaurant"]["menu_cache"]
+    assert cache["status"] == "failed"
+    assert cache["summary"] == "HTTP 403 Forbidden"
+    assert cache["has_data"] is True
+
+    menu_response = client.get("/restaurants/1/menu")
+    menu_payload = menu_response.json()
+    assert menu_payload["status"] == "imported_without_ai"
+    assert menu_payload["latest_status"] == "failed"
+    assert menu_payload["error_message"] == "HTTP 403 Forbidden"
+    assert "Smoky noodles" in menu_payload["extracted_text"]
+
+    clear_response = client.post("/restaurants/1/menu/error/clear")
+
+    assert clear_response.status_code == 200
+    cache = clear_response.json()["restaurant"]["menu_cache"]
+    assert cache["status"] == "imported_without_ai"
+    assert cache["summary"] == "Menu text fetched but AI structuring is disabled."
+    assert cache["has_data"] is True
+
+    cleared_menu_response = client.get("/restaurants/1/menu")
+    assert cleared_menu_response.json()["latest_status"] == "imported_without_ai"
+    assert cleared_menu_response.json()["error_message"] is None
+
+
+def test_clearing_legacy_menu_error_restores_cached_status(
+    client: TestClient,
+) -> None:
+    from sqlalchemy import text
+
+    from app.db import engine
+
+    client.post(
+        "/restaurants/",
+        json={
+            "google_place_id": "legacy-menu-error-place-1",
+            "name": "Legacy Menu Error Cafe",
+            "latitude": 37.77,
+            "longitude": -122.42,
+        },
+    )
+    client.post(
+        "/restaurants/1/menu/import",
+        json={"extracted_text": "Crispy noodles"},
+    )
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE restaurant_menu_caches "
+                "SET status = 'failed', error_message = 'HTTP 403 Forbidden', "
+                "last_success_status = NULL "
+                "WHERE restaurant_id = 1"
+            )
+        )
+
+    clear_response = client.post("/restaurants/1/menu/error/clear")
+
+    assert clear_response.status_code == 200
+    cache = clear_response.json()["restaurant"]["menu_cache"]
+    assert cache["status"] == "cached"
+    assert cache["summary"] == "Menu text fetched but AI structuring is disabled."
+    assert cache["has_data"] is True
 
 
 def test_restaurant_photos_can_be_uploaded_and_removed(
