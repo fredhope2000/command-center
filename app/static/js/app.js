@@ -1871,8 +1871,15 @@ function getGooglePlaceDetails(placeId) {
 }
 
 async function saveRestaurantFromMapClick(shell, event) {
+  if (restaurantState.selectedId) {
+    if (event.placeId) {
+      event.stop();
+    }
+    await closeRestaurantDetailAfterAutosave();
+    return;
+  }
   if (!event.placeId) {
-    closeRestaurantDetail();
+    await closeRestaurantDetailAfterAutosave();
     return;
   }
   event.stop();
